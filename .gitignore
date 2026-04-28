@@ -1,0 +1,24 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# Xcode / Swift local state
+.build/
+.swiftpm/
+DerivedData/
+*.dSYM/
+*.xcuserstate
+xcuserdata/
+
+# Local app bundles and packaged releases
+*.app/
+*.appex/
+dist/
+
+# Generated icons. Source icons live in docs/.
+Resources/AppIcon.icns
+Resources/AppIcon.iconset/
+Resources/AppIconSource.png
+Resources/icon-256.png

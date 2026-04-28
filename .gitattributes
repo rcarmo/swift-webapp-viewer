@@ -1,0 +1,7 @@
+* text=auto
+
+*.png binary
+*.icns binary
+*.zip binary
+*.app binary
+*.appex binary
