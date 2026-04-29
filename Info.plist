@@ -51,7 +51,7 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>DefaultWebAppURL</key>
-	<string>https://example.com</string>
+	<string></string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>NSHighResolutionCapable</key>

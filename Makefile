@@ -31,7 +31,7 @@ release: clean $(APP_BUNDLE) verify package
 debug: CONFIG := debug
 debug: clean $(APP_BUNDLE) verify
 
-$(ICON): Scripts/GenerateAppIcon.swift
+$(ICON): Scripts/GenerateAppIcon.swift docs/icon.png
 	mkdir -p Resources "$(MODULE_CACHE)"
 	CLANG_MODULE_CACHE_PATH="$(MODULE_CACHE)" \
 	xcrun swift \

@@ -7,13 +7,13 @@ private enum AppConfig {
     static let displayName = "Web App Viewer"
     static let customURLScheme = "webappviewer"
 
-    static var defaultURL: URL {
+    static var defaultURL: URL? {
         if let value = Bundle.main.object(forInfoDictionaryKey: "DefaultWebAppURL") as? String,
            let url = URLNormalizer.url(from: value) {
             return url
         }
 
-        return URL(string: "https://example.com")!
+        return nil
     }
 }
 
@@ -129,6 +129,190 @@ final class WindowDragStripView: NSView {
     }
 }
 
+final class MouseHoverTrackingView: NSView {
+    var onMouseHoverChanged: ((Bool) -> Void)?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(
+            NSTrackingArea(
+                rect: .zero,
+                options: [.activeAlways, .inVisibleRect, .mouseEnteredAndExited],
+                owner: self,
+                userInfo: nil
+            )
+        )
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onMouseHoverChanged?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        guard let window else {
+            onMouseHoverChanged?(false)
+            return
+        }
+
+        onMouseHoverChanged?(window.frame.contains(NSEvent.mouseLocation))
+    }
+}
+
+final class StartupDropView: NSView {
+    private let onURL: (URL) -> Void
+    private let titleLabel = NSTextField(labelWithString: "Drop a URL to open it")
+    private let detailLabel = NSTextField(labelWithString: "Drag a link, .webloc file, or plain-text URL here.")
+    private let iconView = NSImageView()
+    private var isDragTargeted = false {
+        didSet { updateAppearance() }
+    }
+
+    init(onURL: @escaping (URL) -> Void) {
+        self.onURL = onURL
+        super.init(frame: .zero)
+
+        wantsLayer = true
+        layer?.cornerRadius = 14
+        layer?.cornerCurve = .continuous
+        layer?.borderWidth = 1
+
+        registerForDraggedTypes([.URL, .fileURL, .string])
+        buildLayout()
+        updateAppearance()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        dragOperation(for: sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        dragOperation(for: sender)
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        isDragTargeted = false
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        isDragTargeted = false
+        guard let url = PasteboardURLReader.url(from: sender.draggingPasteboard) else {
+            return false
+        }
+
+        onURL(url)
+        return true
+    }
+
+    private func dragOperation(for sender: NSDraggingInfo) -> NSDragOperation {
+        let hasURL = PasteboardURLReader.url(from: sender.draggingPasteboard) != nil
+        isDragTargeted = hasURL
+        return hasURL ? .copy : []
+    }
+
+    private func buildLayout() {
+        iconView.image = NSImage(systemSymbolName: "link", accessibilityDescription: nil)
+        iconView.contentTintColor = .secondaryLabelColor
+        iconView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 28, weight: .regular)
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+
+        titleLabel.font = .systemFont(ofSize: 18, weight: .semibold)
+        titleLabel.alignment = .center
+        titleLabel.lineBreakMode = .byWordWrapping
+
+        detailLabel.font = .systemFont(ofSize: 13)
+        detailLabel.textColor = .secondaryLabelColor
+        detailLabel.alignment = .center
+        detailLabel.maximumNumberOfLines = 2
+        detailLabel.lineBreakMode = .byWordWrapping
+
+        let stack = NSStackView(views: [iconView, titleLabel, detailLabel])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 10
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            iconView.widthAnchor.constraint(equalToConstant: 36),
+            iconView.heightAnchor.constraint(equalToConstant: 36),
+
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 28),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -28),
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+
+    private func updateAppearance() {
+        let backgroundColor = isDragTargeted ? NSColor.controlAccentColor.withAlphaComponent(0.14) : .controlBackgroundColor
+        let borderColor = isDragTargeted ? NSColor.controlAccentColor : .separatorColor
+
+        layer?.backgroundColor = resolvedCGColor(for: backgroundColor)
+        layer?.borderColor = resolvedCGColor(for: borderColor)
+    }
+
+    private func resolvedCGColor(for color: NSColor) -> CGColor {
+        var cgColor = NSColor.clear.cgColor
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            cgColor = color.usingColorSpace(.deviceRGB)?.cgColor ?? NSColor.clear.cgColor
+        }
+        return cgColor
+    }
+}
+
+final class StartupWindowController: NSWindowController, NSWindowDelegate {
+    var onClose: (() -> Void)?
+
+    init(openURL: @escaping (URL) -> Void) {
+        let contentView = NSView()
+        let dropView = StartupDropView(onURL: openURL)
+        dropView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(dropView)
+
+        NSLayoutConstraint.activate([
+            dropView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
+            dropView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
+            dropView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 24),
+            dropView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -24)
+        ])
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 160, y: 160, width: 440, height: 220),
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+
+        window.title = AppConfig.displayName
+        window.contentView = contentView
+        window.minSize = NSSize(width: 360, height: 190)
+
+        super.init(window: window)
+        window.delegate = self
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onClose?()
+    }
+}
+
 final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
     private let webView: WKWebView
     private let initialURL: URL
@@ -144,7 +328,7 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
         self.webView.allowsBackForwardNavigationGestures = true
         self.webView.allowsMagnification = true
 
-        let contentView = NSView()
+        let contentView = MouseHoverTrackingView()
         let dragStrip = WindowDragStripView()
         webView.translatesAutoresizingMaskIntoConstraints = false
         dragStrip.translatesAutoresizingMaskIntoConstraints = false
@@ -180,7 +364,10 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
 
         webView.navigationDelegate = self
         window.delegate = self
-        setWindowControlsVisible(false)
+        contentView.onMouseHoverChanged = { [weak self] isMouseOverWindow in
+            self?.setBrowserChromeVisible(isMouseOverWindow)
+        }
+        setBrowserChromeVisible(false)
         load(initialURL)
     }
 
@@ -195,6 +382,16 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
         window?.title = url.host ?? AppConfig.displayName
     }
 
+    func updateBrowserChromeForCurrentMouseLocation() {
+        guard let window else { return }
+        setBrowserChromeVisible(window.frame.contains(NSEvent.mouseLocation))
+    }
+
+    private func setBrowserChromeVisible(_ visible: Bool) {
+        setWindowControlsVisible(visible)
+        setScrollbarsVisible(visible)
+    }
+
     private func setWindowControlsVisible(_ visible: Bool) {
         guard let window else { return }
         window.standardWindowButton(.closeButton)?.isHidden = !visible
@@ -202,8 +399,16 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
         window.standardWindowButton(.zoomButton)?.isHidden = !visible
     }
 
+    private func setScrollbarsVisible(_ visible: Bool) {
+        for scrollView in webView.descendantScrollViews() {
+            scrollView.verticalScroller?.isHidden = !visible
+            scrollView.horizontalScroller?.isHidden = !visible
+        }
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         window?.title = webView.title ?? initialURL.host ?? AppConfig.displayName
+        updateBrowserChromeForCurrentMouseLocation()
     }
 
     func webView(
@@ -223,15 +428,23 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
     }
 }
 
+private extension NSView {
+    func descendantScrollViews() -> [NSScrollView] {
+        var scrollViews: [NSScrollView] = []
+
+        if let scrollView = self as? NSScrollView {
+            scrollViews.append(scrollView)
+        }
+
+        for subview in subviews {
+            scrollViews.append(contentsOf: subview.descendantScrollViews())
+        }
+
+        return scrollViews
+    }
+}
+
 extension BrowserWindowController: NSWindowDelegate {
-    func windowDidBecomeKey(_ notification: Notification) {
-        setWindowControlsVisible(true)
-    }
-
-    func windowDidResignKey(_ notification: Notification) {
-        setWindowControlsVisible(false)
-    }
-
     func windowWillClose(_ notification: Notification) {
         AppDelegate.shared?.windowDidClose(self)
     }
@@ -241,6 +454,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static weak var shared: AppDelegate?
 
     private var windows: [BrowserWindowController] = []
+    private var startupWindow: StartupWindowController?
     private var pendingURLs: [URL] = []
 
     override init() {
@@ -261,7 +475,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         if pendingURLs.isEmpty {
-            openWindow(for: AppConfig.defaultURL)
+            openStartupDestination()
         } else {
             pendingURLs.forEach(openWindow(for:))
             pendingURLs.removeAll()
@@ -286,11 +500,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func openWindow(for url: URL) {
+        closeStartupWindow()
         let controller = BrowserWindowController(url: url)
         windows.append(controller)
         controller.showWindow(nil)
         controller.window?.center()
         controller.window?.makeKeyAndOrderFront(nil)
+        controller.updateBrowserChromeForCurrentMouseLocation()
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -307,6 +523,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             pendingURLs.append(contentsOf: normalizedURLs)
         }
+    }
+
+    private func openStartupDestination() {
+        if let url = AppConfig.defaultURL {
+            openWindow(for: url)
+        } else {
+            openStartupWindow()
+        }
+    }
+
+    private func openStartupWindow() {
+        if let startupWindow {
+            startupWindow.window?.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let controller = StartupWindowController { [weak self] url in
+            self?.openWindow(for: url)
+        }
+        controller.onClose = { [weak self, weak controller] in
+            guard let self, let controller, self.startupWindow === controller else { return }
+            self.startupWindow = nil
+        }
+        startupWindow = controller
+        controller.showWindow(nil)
+        controller.window?.center()
+        controller.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func closeStartupWindow() {
+        startupWindow?.close()
+        startupWindow = nil
     }
 
     @objc private func handleGetURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
@@ -332,7 +581,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func newWindow(_ sender: Any?) {
-        openWindow(for: AppConfig.defaultURL)
+        openStartupDestination()
     }
 
     @objc private func openLocation(_ sender: Any?) {
@@ -343,7 +592,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Cancel")
 
         let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 420, height: 24))
-        textField.stringValue = AppConfig.defaultURL.absoluteString
+        textField.stringValue = AppConfig.defaultURL?.absoluteString ?? ""
         alert.accessoryView = textField
 
         guard alert.runModal() == .alertFirstButtonReturn,

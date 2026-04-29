@@ -8,10 +8,11 @@ This exists because Safari Web Apps still feel like they bring too much browser 
 
 ## Behavior
 
-- Opens `DefaultWebAppURL` from `Info.plist` on launch.
+- Opens `DefaultWebAppURL` from `Info.plist` on launch when configured.
+- Shows a small drop window on launch when no default URL is configured.
 - Opens every supplied URL in a new window.
 - Uses an invisible draggable strip at the top of each window, starting just to the right of the traffic lights.
-- Hides the traffic-light controls whenever the window is not active.
+- Shows the traffic-light controls and scrollbars only while the pointer is over the window.
 - Accepts `.webloc`, `public.url`, and plain text URL drops on the Dock icon.
 - Adds an "Open in Web App Viewer" macOS Service for selected URLs or URL-like text.
 - Includes a macOS Share Extension that forwards shared URLs to a new app window.
@@ -29,8 +30,10 @@ Edit `DefaultWebAppURL` in `Info.plist`:
 
 ```xml
 <key>DefaultWebAppURL</key>
-<string>https://example.com</string>
+<string>https://your-site.example</string>
 ```
+
+Leave it blank to choose a URL by dragging a link, `.webloc` file, or plain-text URL onto the startup window.
 
 ## Build
 
