@@ -22,8 +22,9 @@ SWIFTC_FLAGS_release := -O
 SWIFTC_FLAGS = $(SWIFTC_FLAGS_$(CONFIG))
 SIGN_IDENTITY ?= -
 SIGN_FLAGS := --force --sign "$(SIGN_IDENTITY)" --timestamp=none --entitlements "$(ENTITLEMENTS)"
+VERSION ?=
 
-.PHONY: all clean debug release package run sign verify
+.PHONY: all bump-version clean debug release package run sign verify
 
 all: $(APP_BUNDLE)
 release: CONFIG := release
@@ -31,6 +32,13 @@ release: clean $(APP_BUNDLE) verify package
 
 debug: CONFIG := debug
 debug: clean $(APP_BUNDLE) verify
+
+bump-version:
+	@test -n "$(VERSION)" || (echo "Usage: make bump-version VERSION=1.0.1" && exit 1)
+	plutil -replace CFBundleShortVersionString -string "$(VERSION)" Info.plist
+	plutil -replace CFBundleVersion -string "$(VERSION)" Info.plist
+	plutil -replace CFBundleShortVersionString -string "$(VERSION)" ShareExtensionInfo.plist
+	plutil -replace CFBundleVersion -string "$(VERSION)" ShareExtensionInfo.plist
 
 $(ICON): Scripts/GenerateAppIcon.swift docs/icon.png
 	mkdir -p Resources "$(MODULE_CACHE)"
