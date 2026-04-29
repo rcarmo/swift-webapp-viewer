@@ -613,6 +613,10 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
         window?.title = url.host ?? AppConfig.displayName
     }
 
+    func reload() {
+        webView.reload()
+    }
+
     var currentURL: URL? {
         webView.url ?? window?.representedURL ?? initialURL
     }
@@ -927,6 +931,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openWindow(for: url)
     }
 
+    @objc private func reloadPage(_ sender: Any?) {
+        activeBrowserWindow()?.reload()
+    }
+
     @objc private func installURLAsApp(_ sender: Any?) {
         let activeWindow = activeBrowserWindow()
         guard let url = promptForAppInstallURL() else { return }
@@ -1093,6 +1101,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
+
+        let viewMenuItem = NSMenuItem()
+        let viewMenu = NSMenu(title: "View")
+        viewMenu.addItem(
+            withTitle: "Reload Page",
+            action: #selector(AppDelegate.reloadPage(_:)),
+            keyEquivalent: "r"
+        )
+        viewMenuItem.submenu = viewMenu
+        mainMenu.addItem(viewMenuItem)
 
         let windowMenuItem = NSMenuItem()
         let windowMenu = NSMenu(title: "Window")
