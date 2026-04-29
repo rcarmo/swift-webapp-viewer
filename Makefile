@@ -12,6 +12,7 @@ SHARE_EXTENSION_ENTITLEMENTS := ShareExtensionEntitlements.plist
 MODULE_CACHE := $(BUILD_DIR)/ModuleCache
 ICON := Resources/AppIcon.icns
 ENTITLEMENTS := Entitlements.plist
+APP_SOURCES := $(wildcard Sources/WebAppViewer/*.swift)
 DIST_DIR := dist
 RELEASE_ZIP := $(DIST_DIR)/$(APP_NAME).zip
 CONFIG ?= release
@@ -38,7 +39,7 @@ $(ICON): Scripts/GenerateAppIcon.swift docs/icon.png
 		-module-cache-path "$(MODULE_CACHE)" \
 		Scripts/GenerateAppIcon.swift
 
-$(APP_BUNDLE): Sources/WebAppViewer/main.swift Info.plist $(ICON) $(ENTITLEMENTS) $(SHARE_EXTENSION_STAGING)
+$(APP_BUNDLE): $(APP_SOURCES) Info.plist $(ICON) $(ENTITLEMENTS) $(SHARE_EXTENSION_STAGING)
 	rm -rf "$(APP_BUNDLE)"
 	mkdir -p "$(APP_BUNDLE)/Contents/MacOS" "$(APP_BUNDLE)/Contents/Resources" "$(APP_BUNDLE)/Contents/PlugIns" "$(MODULE_CACHE)"
 	cp Info.plist "$(APP_BUNDLE)/Contents/Info.plist"
@@ -54,7 +55,7 @@ $(APP_BUNDLE): Sources/WebAppViewer/main.swift Info.plist $(ICON) $(ENTITLEMENTS
 		-framework WebKit \
 		-framework UniformTypeIdentifiers \
 		-o "$(EXECUTABLE)" \
-		Sources/WebAppViewer/main.swift
+		$(APP_SOURCES)
 	if [ -d "$(EXECUTABLE).dSYM" ]; then \
 		rm -rf "$(BUILD_DIR)/$(APP_NAME).dSYM"; \
 		mv "$(EXECUTABLE).dSYM" "$(BUILD_DIR)/$(APP_NAME).dSYM"; \

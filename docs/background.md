@@ -8,7 +8,7 @@ This app takes the opposite stance:
 
 - show the web page in a native WebKit window
 - keep the titlebar visually quiet
-- hide the traffic lights when the window is inactive
+- hide the traffic lights and scrollbars when the pointer is away
 - leave only a small invisible strip for dragging the window
 - accept URLs from Dock drops, Services, the Share sheet, and a custom URL scheme
 

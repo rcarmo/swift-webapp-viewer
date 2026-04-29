@@ -313,6 +313,237 @@ final class StartupWindowController: NSWindowController, NSWindowDelegate {
     }
 }
 
+final class WebAppInstallURLDialog: NSObject {
+    private let suggestedURL: URL?
+    private let panel: NSPanel
+    private let urlField = NSTextField(frame: .zero)
+    private let continueButton = NSButton(title: "Continue", target: nil, action: nil)
+    private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
+
+    init(suggestedURL: URL?) {
+        self.suggestedURL = suggestedURL
+        self.panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 210),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        super.init()
+        buildPanel()
+    }
+
+    func run() -> URL? {
+        NSApp.activate(ignoringOtherApps: true)
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+        let response = NSApp.runModal(for: panel)
+        panel.orderOut(nil)
+
+        guard response == .OK else { return nil }
+        return URLNormalizer.url(from: urlField.stringValue)
+    }
+
+    private func buildPanel() {
+        panel.title = "Choose URL"
+        panel.isReleasedWhenClosed = false
+        panel.contentView = NSView(frame: panel.contentRect(forFrameRect: panel.frame))
+
+        guard let contentView = panel.contentView else { return }
+
+        let titleLabel = NSTextField(labelWithString: "Choose URL")
+        titleLabel.font = .systemFont(ofSize: 18, weight: .semibold)
+        titleLabel.frame = NSRect(x: 28, y: 164, width: 320, height: 24)
+
+        let detailLabel = NSTextField(labelWithString: "Enter the web address to inspect for a page title and installable icons.")
+        detailLabel.textColor = .secondaryLabelColor
+        detailLabel.frame = NSRect(x: 28, y: 136, width: 564, height: 36)
+        detailLabel.maximumNumberOfLines = 2
+
+        let urlLabel = NSTextField(labelWithString: "URL:")
+        urlLabel.alignment = .right
+        urlLabel.frame = NSRect(x: 28, y: 86, width: 72, height: 20)
+
+        urlField.frame = NSRect(x: 112, y: 82, width: 480, height: 24)
+        urlField.stringValue = suggestedURL?.absoluteString ?? ""
+
+        cancelButton.frame = NSRect(x: 416, y: 24, width: 88, height: 28)
+        cancelButton.target = self
+        cancelButton.action = #selector(cancel(_:))
+        cancelButton.keyEquivalent = "\u{1b}"
+
+        continueButton.frame = NSRect(x: 512, y: 24, width: 84, height: 28)
+        continueButton.target = self
+        continueButton.action = #selector(continueInstall(_:))
+        continueButton.keyEquivalent = "\r"
+
+        contentView.addSubview(titleLabel)
+        contentView.addSubview(detailLabel)
+        contentView.addSubview(urlLabel)
+        contentView.addSubview(urlField)
+        contentView.addSubview(cancelButton)
+        contentView.addSubview(continueButton)
+    }
+
+    @objc private func continueInstall(_ sender: Any?) {
+        NSApp.stopModal(withCode: .OK)
+    }
+
+    @objc private func cancel(_ sender: Any?) {
+        NSApp.stopModal(withCode: .cancel)
+    }
+}
+
+final class WebAppInstallDialog: NSObject {
+    private let url: URL
+    private let initialName: String
+    private let pageIconCount: Int
+    private var iconChoices: [WebAppIconChoice]
+
+    private let panel: NSPanel
+    private let nameField = NSTextField(frame: .zero)
+    private let iconPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let preview = NSImageView(frame: .zero)
+    private let statusLabel = NSTextField(labelWithString: "Looking for page icons...")
+    private let saveButton = NSButton(title: "Save", target: nil, action: nil)
+    private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
+
+    init(url: URL, suggestedName: String?, metadata: WebAppInstallMetadata) {
+        self.url = url
+        self.initialName = metadata.title?.nilIfBlank ?? suggestedName ?? url.host ?? "Web App"
+        self.pageIconCount = metadata.iconChoices.count
+        self.iconChoices = metadata.iconChoices + [
+            WebAppIconChoice(title: "Default Web App Viewer icon", image: nil, sourceURL: nil)
+        ]
+        self.panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 330),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        super.init()
+        buildPanel()
+    }
+
+    func run() -> WebAppInstallPlan? {
+        refreshIconMenu()
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+        let response = NSApp.runModal(for: panel)
+        panel.orderOut(nil)
+
+        guard response == .OK,
+              let name = nameField.stringValue.nilIfBlank else {
+            return nil
+        }
+
+        return WebAppInstaller.makePlan(
+            for: url,
+            name: name,
+            icon: selectedIcon
+        )
+    }
+
+    private var selectedIcon: WebAppIconChoice? {
+        guard iconChoices.indices.contains(iconPopup.indexOfSelectedItem) else { return nil }
+        return iconChoices[iconPopup.indexOfSelectedItem]
+    }
+
+    private func buildPanel() {
+        panel.title = "Customize Web App"
+        panel.isReleasedWhenClosed = false
+        panel.contentView = NSView(frame: panel.contentRect(forFrameRect: panel.frame))
+
+        guard let contentView = panel.contentView else { return }
+
+        let titleLabel = NSTextField(labelWithString: "Customize Web App")
+        titleLabel.font = .systemFont(ofSize: 18, weight: .semibold)
+        titleLabel.frame = NSRect(x: 28, y: 284, width: 320, height: 24)
+
+        let detailLabel = NSTextField(labelWithString: "Rename it and choose an icon before saving it to \(WebAppInstaller.applicationsDirectory().path).")
+        detailLabel.textColor = .secondaryLabelColor
+        detailLabel.frame = NSRect(x: 28, y: 250, width: 564, height: 36)
+        detailLabel.maximumNumberOfLines = 2
+
+        let nameLabel = NSTextField(labelWithString: "Name:")
+        nameLabel.alignment = .right
+        nameLabel.frame = NSRect(x: 28, y: 206, width: 72, height: 20)
+
+        nameField.frame = NSRect(x: 112, y: 202, width: 480, height: 24)
+        nameField.stringValue = initialName
+
+        let iconLabel = NSTextField(labelWithString: "Icon:")
+        iconLabel.alignment = .right
+        iconLabel.frame = NSRect(x: 28, y: 162, width: 72, height: 20)
+
+        iconPopup.frame = NSRect(x: 112, y: 156, width: 480, height: 28)
+        iconPopup.target = self
+        iconPopup.action = #selector(iconSelectionChanged(_:))
+
+        preview.frame = NSRect(x: 112, y: 60, width: 80, height: 80)
+        preview.image = NSApp.applicationIconImage
+        preview.imageScaling = .scaleProportionallyUpOrDown
+
+        statusLabel.stringValue = "Found \(pageIconCount) page icon\(pageIconCount == 1 ? "" : "s")."
+        statusLabel.textColor = .secondaryLabelColor
+        statusLabel.alignment = .left
+        statusLabel.frame = NSRect(x: 212, y: 92, width: 380, height: 20)
+
+        cancelButton.frame = NSRect(x: 416, y: 24, width: 88, height: 28)
+        cancelButton.target = self
+        cancelButton.action = #selector(cancel(_:))
+        cancelButton.keyEquivalent = "\u{1b}"
+
+        saveButton.frame = NSRect(x: 512, y: 24, width: 84, height: 28)
+        saveButton.target = self
+        saveButton.action = #selector(save(_:))
+        saveButton.keyEquivalent = "\r"
+
+        contentView.addSubview(titleLabel)
+        contentView.addSubview(detailLabel)
+        contentView.addSubview(nameLabel)
+        contentView.addSubview(nameField)
+        contentView.addSubview(iconLabel)
+        contentView.addSubview(iconPopup)
+        contentView.addSubview(preview)
+        contentView.addSubview(statusLabel)
+        contentView.addSubview(cancelButton)
+        contentView.addSubview(saveButton)
+    }
+
+    private func refreshIconMenu() {
+        iconPopup.removeAllItems()
+        for choice in iconChoices {
+            iconPopup.addItem(withTitle: choice.title)
+            iconPopup.lastItem?.image = menuImage(from: choice.image)
+        }
+        iconPopup.selectItem(at: 0)
+        preview.image = iconChoices.first?.image ?? NSApp.applicationIconImage
+    }
+
+    @objc private func iconSelectionChanged(_ sender: NSPopUpButton) {
+        preview.image = selectedIcon?.image ?? NSApp.applicationIconImage
+    }
+
+    @objc private func save(_ sender: Any?) {
+        NSApp.stopModal(withCode: .OK)
+    }
+
+    @objc private func cancel(_ sender: Any?) {
+        NSApp.stopModal(withCode: .cancel)
+    }
+
+    private func menuImage(from image: NSImage?) -> NSImage? {
+        guard let source = image ?? NSApp.applicationIconImage else {
+            return nil
+        }
+        let copy = source.copy() as? NSImage
+        copy?.size = NSSize(width: 18, height: 18)
+        return copy
+    }
+}
+
 final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
     private let webView: WKWebView
     private let initialURL: URL
@@ -382,6 +613,70 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
         window?.title = url.host ?? AppConfig.displayName
     }
 
+    var currentURL: URL? {
+        webView.url ?? window?.representedURL ?? initialURL
+    }
+
+    var suggestedAppName: String? {
+        webView.title?.nilIfBlank
+            ?? window?.title.nilIfBlank
+            ?? currentURL?.host
+    }
+
+    @MainActor func livePageSnapshot(for installURL: URL) async -> WebAppPageSnapshot? {
+        guard let currentURL,
+              currentURL.isSameInstallMetadataDocument(as: installURL) else {
+            return nil
+        }
+
+        let script = """
+        JSON.stringify({
+          title: document.title || "",
+          baseURL: document.baseURI || window.location.href,
+          links: Array.from(document.querySelectorAll("link[rel]")).map((link) => ({
+            rel: link.rel || link.getAttribute("rel") || "",
+            href: link.href || link.getAttribute("href") || "",
+            sizes: link.sizes ? link.sizes.value : (link.getAttribute("sizes") || "")
+          }))
+        })
+        """
+
+        guard let json = await evaluateJavaScriptString(script),
+              let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let baseURLValue = object["baseURL"] as? String,
+              let baseURL = URL(string: baseURLValue) else {
+            return nil
+        }
+
+        let links = (object["links"] as? [[String: Any]] ?? []).compactMap { link -> WebAppPageLink? in
+            guard let href = link["href"] as? String,
+                  !href.isEmpty else {
+                return nil
+            }
+
+            return WebAppPageLink(
+                rel: link["rel"] as? String ?? "",
+                href: href,
+                sizes: link["sizes"] as? String
+            )
+        }
+
+        return WebAppPageSnapshot(
+            title: (object["title"] as? String)?.nilIfBlank,
+            baseURL: baseURL,
+            links: links
+        )
+    }
+
+    @MainActor private func evaluateJavaScriptString(_ script: String) async -> String? {
+        await withCheckedContinuation { continuation in
+            webView.evaluateJavaScript(script) { result, _ in
+                continuation.resume(returning: result as? String)
+            }
+        }
+    }
+
     func updateBrowserChromeForCurrentMouseLocation() {
         guard let window else { return }
         setBrowserChromeVisible(window.frame.contains(NSEvent.mouseLocation))
@@ -444,6 +739,25 @@ private extension NSView {
     }
 }
 
+private extension URL {
+    func isSameInstallMetadataDocument(as other: URL) -> Bool {
+        guard let lhs = URLComponents(url: self, resolvingAgainstBaseURL: true),
+              let rhs = URLComponents(url: other, resolvingAgainstBaseURL: true) else {
+            return absoluteString == other.absoluteString
+        }
+
+        return lhs.scheme?.lowercased() == rhs.scheme?.lowercased()
+            && lhs.host?.lowercased() == rhs.host?.lowercased()
+            && lhs.port == rhs.port
+            && normalizedInstallPath(lhs.path) == normalizedInstallPath(rhs.path)
+            && lhs.query == rhs.query
+    }
+
+    private func normalizedInstallPath(_ path: String) -> String {
+        path.isEmpty ? "/" : path
+    }
+}
+
 extension BrowserWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         AppDelegate.shared?.windowDidClose(self)
@@ -454,7 +768,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static weak var shared: AppDelegate?
 
     private var windows: [BrowserWindowController] = []
-    private var startupWindow: StartupWindowController?
+    private var blankWindows: [StartupWindowController] = []
     private var pendingURLs: [URL] = []
 
     override init() {
@@ -500,7 +814,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func openWindow(for url: URL) {
-        closeStartupWindow()
         let controller = BrowserWindowController(url: url)
         windows.append(controller)
         controller.showWindow(nil)
@@ -512,6 +825,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func windowDidClose(_ controller: BrowserWindowController) {
         windows.removeAll { $0 === controller }
+    }
+
+    private func activeBrowserWindow() -> BrowserWindowController? {
+        windows.first { $0.window?.isKeyWindow == true }
+            ?? windows.first { $0.window?.isMainWindow == true }
+            ?? windows.last
     }
 
     private func open(_ urls: [URL]) {
@@ -529,33 +848,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let url = AppConfig.defaultURL {
             openWindow(for: url)
         } else {
-            openStartupWindow()
+            openBlankWindow()
         }
     }
 
-    private func openStartupWindow() {
-        if let startupWindow {
-            startupWindow.window?.makeKeyAndOrderFront(nil)
-            return
-        }
-
-        let controller = StartupWindowController { [weak self] url in
+    private func openBlankWindow() {
+        var controller: StartupWindowController?
+        controller = StartupWindowController { [weak self, weak controller] url in
+            if let controller {
+                self?.closeBlankWindow(controller)
+            }
             self?.openWindow(for: url)
         }
-        controller.onClose = { [weak self, weak controller] in
-            guard let self, let controller, self.startupWindow === controller else { return }
-            self.startupWindow = nil
+        controller?.onClose = { [weak self, weak controller] in
+            guard let controller else { return }
+            self?.blankWindowDidClose(controller)
         }
-        startupWindow = controller
+        guard let controller else { return }
+
+        blankWindows.append(controller)
         controller.showWindow(nil)
         controller.window?.center()
         controller.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func closeStartupWindow() {
-        startupWindow?.close()
-        startupWindow = nil
+    private func closeBlankWindow(_ controller: StartupWindowController) {
+        controller.close()
+        blankWindowDidClose(controller)
+    }
+
+    private func blankWindowDidClose(_ controller: StartupWindowController) {
+        blankWindows.removeAll { $0 === controller }
     }
 
     @objc private func handleGetURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
@@ -581,7 +905,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func newWindow(_ sender: Any?) {
-        openStartupDestination()
+        openBlankWindow()
     }
 
     @objc private func openLocation(_ sender: Any?) {
@@ -603,6 +927,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openWindow(for: url)
     }
 
+    @objc private func installURLAsApp(_ sender: Any?) {
+        let activeWindow = activeBrowserWindow()
+        guard let url = promptForAppInstallURL() else { return }
+
+        Task { @MainActor [weak self, activeWindow] in
+            let livePageSnapshot = await activeWindow?.livePageSnapshot(for: url)
+            let metadata = await WebAppInstaller.metadata(
+                for: url,
+                livePageSnapshot: livePageSnapshot
+            )
+
+            self?.installWebApp(
+                url: url,
+                activeWindow: activeWindow,
+                metadata: metadata
+            )
+        }
+    }
+
+    private func promptForAppInstallURL() -> URL? {
+        let activeWindow = activeBrowserWindow()
+        let suggestedURL = activeWindow?.currentURL ?? AppConfig.defaultURL
+        return WebAppInstallURLDialog(suggestedURL: suggestedURL).run()
+    }
+
+    private func installWebApp(
+        url: URL,
+        activeWindow: BrowserWindowController?,
+        metadata: WebAppInstallMetadata
+    ) {
+        let dialog = WebAppInstallDialog(
+            url: url,
+            suggestedName: activeWindow?.suggestedAppName,
+            metadata: metadata
+        )
+        guard let plan = dialog.run() else { return }
+
+        let fileManager = FileManager.default
+        var shouldReplace = false
+
+        if fileManager.fileExists(atPath: plan.destinationURL.path) {
+            shouldReplace = shouldReplaceInstalledApp(named: plan.name, at: plan.destinationURL)
+            guard shouldReplace else { return }
+        }
+
+        do {
+            try WebAppInstaller.install(plan, replacingExisting: shouldReplace)
+            WebAppInstaller.launch(plan.destinationURL)
+        } catch {
+            showInstallError(error)
+        }
+    }
+
+    private func shouldReplaceInstalledApp(named name: String, at url: URL) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "\(name) already exists"
+        alert.informativeText = "Replace the app in \(url.deletingLastPathComponent().path)?"
+        alert.addButton(withTitle: "Replace")
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    private func showInstallError(_ error: Error) {
+        let alert = NSAlert(error: error)
+        alert.messageText = "Could not install the web app"
+        alert.runModal()
+    }
+
     private static func makeMainMenu() -> NSMenu {
         let mainMenu = NSMenu()
 
@@ -619,7 +1011,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fileMenuItem = NSMenuItem()
         let fileMenu = NSMenu(title: "File")
         fileMenu.addItem(
-            withTitle: "New Window",
+            withTitle: "New Blank Window",
             action: #selector(AppDelegate.newWindow(_:)),
             keyEquivalent: "n"
         )
@@ -627,6 +1019,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             withTitle: "Open Location...",
             action: #selector(AppDelegate.openLocation(_:)),
             keyEquivalent: "l"
+        )
+        fileMenu.addItem(.separator())
+        fileMenu.addItem(
+            withTitle: "Install URL as App...",
+            action: #selector(AppDelegate.installURLAsApp(_:)),
+            keyEquivalent: "i"
         )
         fileMenuItem.submenu = fileMenu
         mainMenu.addItem(fileMenuItem)

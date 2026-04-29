@@ -10,7 +10,9 @@ This exists because Safari Web Apps still feel like they bring too much browser 
 
 - Opens `DefaultWebAppURL` from `Info.plist` on launch when configured.
 - Shows a small drop window on launch when no default URL is configured.
+- Creates a fresh blank drop window with Command-N.
 - Opens every supplied URL in a new window.
+- Installs the current or entered URL as its own app in `~/Applications`, with a chance to rename it and pick from detected manifest or favicon images before saving.
 - Uses an invisible draggable strip at the top of each window, starting just to the right of the traffic lights.
 - Shows the traffic-light controls and scrollbars only while the pointer is over the window.
 - Accepts `.webloc`, `public.url`, and plain text URL drops on the Dock icon.
