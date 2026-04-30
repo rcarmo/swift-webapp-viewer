@@ -795,6 +795,10 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
         webView.url ?? window?.representedURL ?? initialURL
     }
 
+    var appHomeURL: URL {
+        initialURL
+    }
+
     var suggestedAppName: String? {
         webView.title?.nilIfBlank
             ?? window?.title.nilIfBlank
@@ -889,15 +893,45 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
-        if navigationAction.targetFrame == nil,
-           let url = navigationAction.request.url,
-           URLNormalizer.url(from: url) != nil {
+        guard let url = navigationAction.request.url,
+              URLNormalizer.url(from: url) != nil else {
+            decisionHandler(.allow)
+            return
+        }
+
+        if shouldOpenInSafari(url, navigationAction: navigationAction) {
+            openInSafari(url)
+            decisionHandler(.cancel)
+            return
+        }
+
+        if navigationAction.targetFrame == nil {
             AppDelegate.shared?.openWindow(for: url)
             decisionHandler(.cancel)
             return
         }
 
         decisionHandler(.allow)
+    }
+
+    private func shouldOpenInSafari(
+        _ url: URL,
+        navigationAction: WKNavigationAction
+    ) -> Bool {
+        let opensNewWindow = navigationAction.targetFrame == nil
+        let userClickedLink = navigationAction.navigationType == .linkActivated
+        return (opensNewWindow || userClickedLink) && !url.isSameWebOrigin(as: initialURL)
+    }
+
+    private func openInSafari(_ url: URL) {
+        guard let safariURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Safari") else {
+            NSWorkspace.shared.open(url)
+            return
+        }
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.open([url], withApplicationAt: safariURL, configuration: configuration)
     }
 }
 
@@ -918,6 +952,17 @@ private extension NSView {
 }
 
 private extension URL {
+    func isSameWebOrigin(as other: URL) -> Bool {
+        guard let lhs = URLComponents(url: self, resolvingAgainstBaseURL: true),
+              let rhs = URLComponents(url: other, resolvingAgainstBaseURL: true) else {
+            return false
+        }
+
+        return lhs.scheme?.lowercased() == rhs.scheme?.lowercased()
+            && lhs.host?.lowercased() == rhs.host?.lowercased()
+            && lhs.normalizedPort == rhs.normalizedPort
+    }
+
     func isSameInstallMetadataDocument(as other: URL) -> Bool {
         guard let lhs = URLComponents(url: self, resolvingAgainstBaseURL: true),
               let rhs = URLComponents(url: other, resolvingAgainstBaseURL: true) else {
@@ -933,6 +978,21 @@ private extension URL {
 
     private func normalizedInstallPath(_ path: String) -> String {
         path.isEmpty ? "/" : path
+    }
+}
+
+private extension URLComponents {
+    var normalizedPort: Int? {
+        if let port { return port }
+
+        switch scheme?.lowercased() {
+        case "http":
+            return 80
+        case "https":
+            return 443
+        default:
+            return nil
+        }
     }
 }
 
@@ -1083,7 +1143,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func newWindow(_ sender: Any?) {
-        openBlankWindow()
+        if let url = AppConfig.defaultURL ?? activeBrowserWindow()?.appHomeURL {
+            openWindow(for: url)
+        } else {
+            openBlankWindow()
+        }
     }
 
     @objc private func openLocation(_ sender: Any?) {
@@ -1210,7 +1274,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fileMenuItem = NSMenuItem()
         let fileMenu = NSMenu(title: "File")
         fileMenu.addItem(
-            withTitle: "New Blank Window",
+            withTitle: "New Window",
             action: #selector(AppDelegate.newWindow(_:)),
             keyEquivalent: "n"
         )
