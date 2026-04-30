@@ -1,5 +1,7 @@
 APP_NAME := WebAppViewer
 DISPLAY_NAME := Web App Viewer
+PLIST := Info.plist
+SHARE_EXTENSION_PLIST := ShareExtensionInfo.plist
 BUILD_DIR := .build
 APP_BUNDLE := $(BUILD_DIR)/$(APP_NAME).app
 EXECUTABLE := $(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)
@@ -17,14 +19,17 @@ DIST_DIR := dist
 RELEASE_ZIP := $(DIST_DIR)/$(APP_NAME).zip
 CONFIG ?= release
 DEPLOYMENT_TARGET ?= 14.0
+APP_VERSION := $(shell /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$(PLIST)")
+APP_BUILD := $(shell /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$(PLIST)")
+VERSION ?= $(APP_VERSION)
+BUILD_NUMBER ?= $(shell date -u +%Y%m%d%H%M)
 SWIFTC_FLAGS_debug := -Onone -g
 SWIFTC_FLAGS_release := -O
 SWIFTC_FLAGS = $(SWIFTC_FLAGS_$(CONFIG))
 SIGN_IDENTITY ?= -
 SIGN_FLAGS := --force --sign "$(SIGN_IDENTITY)" --timestamp=none --entitlements "$(ENTITLEMENTS)"
-VERSION ?=
 
-.PHONY: all bump-version clean debug release package run sign verify
+.PHONY: all bump-minor bump-patch bump-version clean debug package print-version release run set-version sign tag-release validate-version verify
 
 all: $(APP_BUNDLE)
 release: CONFIG := release
@@ -33,12 +38,37 @@ release: clean $(APP_BUNDLE) verify package
 debug: CONFIG := debug
 debug: clean $(APP_BUNDLE) verify
 
-bump-version:
-	@test -n "$(VERSION)" || (echo "Usage: make bump-version VERSION=1.0.1" && exit 1)
-	plutil -replace CFBundleShortVersionString -string "$(VERSION)" Info.plist
-	plutil -replace CFBundleVersion -string "$(VERSION)" Info.plist
-	plutil -replace CFBundleShortVersionString -string "$(VERSION)" ShareExtensionInfo.plist
-	plutil -replace CFBundleVersion -string "$(VERSION)" ShareExtensionInfo.plist
+print-version:
+	@echo "$(APP_NAME) $(APP_VERSION) ($(APP_BUILD)); release tag v$(APP_VERSION)"
+
+validate-version:
+	@test -n "$(VERSION)" || { echo "VERSION is required, for example VERSION=1.2.3"; exit 1; }
+	@case "$(VERSION)" in *[!0-9.]*|.*|*..*|*.) echo "VERSION must be a stable dotted numeric version, for example 1.2.3"; exit 1 ;; esac
+
+set-version: validate-version
+	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" "$(PLIST)"
+	/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(BUILD_NUMBER)" "$(PLIST)"
+	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" "$(SHARE_EXTENSION_PLIST)"
+	/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(BUILD_NUMBER)" "$(SHARE_EXTENSION_PLIST)"
+	@echo "Updated $(PLIST) and $(SHARE_EXTENSION_PLIST) to $(VERSION) ($(BUILD_NUMBER)); release tag v$(VERSION)"
+
+bump-version: set-version
+
+bump-patch:
+	@next_version="$$(awk -v version="$(APP_VERSION)" 'BEGIN { split(version, p, "."); major = p[1] + 0; minor = p[2] + 0; patch = p[3] + 1; printf "%d.%d.%d", major, minor, patch }')"; \
+	$(MAKE) set-version VERSION="$$next_version"
+
+bump-minor:
+	@next_version="$$(awk -v version="$(APP_VERSION)" 'BEGIN { split(version, p, "."); major = p[1] + 0; minor = p[2] + 1; printf "%d.%d.0", major, minor }')"; \
+	$(MAKE) set-version VERSION="$$next_version"
+
+tag-release: validate-version
+	@git diff --quiet --exit-code || { echo "Working tree has unstaged changes; commit before tagging v$(APP_VERSION)."; exit 1; }
+	@git diff --cached --quiet --exit-code || { echo "Index has staged changes; commit before tagging v$(APP_VERSION)."; exit 1; }
+	@test -z "$$(git tag --list "v$(APP_VERSION)")" || { echo "Tag v$(APP_VERSION) already exists."; exit 1; }
+	$(MAKE) release
+	git tag -a "v$(APP_VERSION)" -m "$(DISPLAY_NAME) $(APP_VERSION)"
+	@echo "Created tag v$(APP_VERSION). Push with: git push origin main v$(APP_VERSION)"
 
 $(ICON): Scripts/GenerateAppIcon.swift docs/icon.png
 	mkdir -p Resources "$(MODULE_CACHE)"
@@ -47,10 +77,10 @@ $(ICON): Scripts/GenerateAppIcon.swift docs/icon.png
 		-module-cache-path "$(MODULE_CACHE)" \
 		Scripts/GenerateAppIcon.swift
 
-$(APP_BUNDLE): $(APP_SOURCES) Info.plist $(ICON) $(ENTITLEMENTS) $(SHARE_EXTENSION_STAGING)
+$(APP_BUNDLE): $(APP_SOURCES) $(PLIST) $(ICON) $(ENTITLEMENTS) $(SHARE_EXTENSION_STAGING)
 	rm -rf "$(APP_BUNDLE)"
 	mkdir -p "$(APP_BUNDLE)/Contents/MacOS" "$(APP_BUNDLE)/Contents/Resources" "$(APP_BUNDLE)/Contents/PlugIns" "$(MODULE_CACHE)"
-	cp Info.plist "$(APP_BUNDLE)/Contents/Info.plist"
+	cp "$(PLIST)" "$(APP_BUNDLE)/Contents/Info.plist"
 	cp "$(ICON)" "$(APP_BUNDLE)/Contents/Resources/AppIcon.icns"
 	cp -R "$(SHARE_EXTENSION_STAGING)" "$(APP_BUNDLE)/Contents/PlugIns/"
 	printf "APPL????" > "$(APP_BUNDLE)/Contents/PkgInfo"
@@ -70,10 +100,10 @@ $(APP_BUNDLE): $(APP_SOURCES) Info.plist $(ICON) $(ENTITLEMENTS) $(SHARE_EXTENSI
 	fi
 	$(MAKE) sign
 
-$(SHARE_EXTENSION_STAGING): Sources/ShareExtension/ShareViewController.swift ShareExtensionInfo.plist $(SHARE_EXTENSION_ENTITLEMENTS) $(ICON)
+$(SHARE_EXTENSION_STAGING): Sources/ShareExtension/ShareViewController.swift $(SHARE_EXTENSION_PLIST) $(SHARE_EXTENSION_ENTITLEMENTS) $(ICON)
 	rm -rf "$(SHARE_EXTENSION_STAGING)"
 	mkdir -p "$(SHARE_EXTENSION_STAGING)/Contents/MacOS" "$(SHARE_EXTENSION_STAGING)/Contents/Resources" "$(MODULE_CACHE)"
-	cp ShareExtensionInfo.plist "$(SHARE_EXTENSION_STAGING)/Contents/Info.plist"
+	cp "$(SHARE_EXTENSION_PLIST)" "$(SHARE_EXTENSION_STAGING)/Contents/Info.plist"
 	cp "$(ICON)" "$(SHARE_EXTENSION_STAGING)/Contents/Resources/AppIcon.icns"
 	CLANG_MODULE_CACHE_PATH="$(MODULE_CACHE)" \
 	xcrun swiftc \

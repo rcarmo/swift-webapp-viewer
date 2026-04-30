@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build and publish"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and publish release
+    runs-on: macos-15
+
+    steps:
+      - name: Resolve release tag
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            release_tag="${{ inputs.tag }}"
+          else
+            release_tag="${GITHUB_REF_NAME}"
+          fi
+
+          if ! [[ "${release_tag}" =~ ^v[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "Release tag must look like v1.2.3; got ${release_tag}" >&2
+            exit 1
+          fi
+
+          echo "RELEASE_TAG=${release_tag}" >> "${GITHUB_ENV}"
+
+      - name: Check out tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build release archive
+        run: make release
+
+      - name: Name release assets
+        run: |
+          asset_base="WebAppViewer-${RELEASE_TAG}"
+          cp dist/WebAppViewer.zip "dist/${asset_base}.zip"
+          shasum -a 256 "dist/${asset_base}.zip" > "dist/${asset_base}.zip.sha256"
+
+      - name: Prepare release notes
+        run: |
+          cat > dist/release-notes.md <<EOF
+          ## Downloads
+
+          - [WebAppViewer-${RELEASE_TAG}.zip](https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/WebAppViewer-${RELEASE_TAG}.zip)
+          - [SHA-256 checksum](https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/WebAppViewer-${RELEASE_TAG}.zip.sha256)
+
+          Release builds are ad-hoc signed, not Developer ID signed or notarized. If macOS quarantines a downloaded build, only remove that quarantine bit for a build you trust:
+
+          \`\`\`sh
+          xattr -dr com.apple.quarantine /Applications/WebAppViewer.app
+          \`\`\`
+
+          **Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}
+          EOF
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: WebAppViewer-${{ env.RELEASE_TAG }}
+          path: |
+            dist/WebAppViewer-${{ env.RELEASE_TAG }}.zip
+            dist/WebAppViewer-${{ env.RELEASE_TAG }}.zip.sha256
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" \
+              "dist/WebAppViewer-${RELEASE_TAG}.zip" \
+              "dist/WebAppViewer-${RELEASE_TAG}.zip.sha256" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --clobber
+            gh release edit "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --notes-file dist/release-notes.md \
+              --latest
+          else
+            gh release create "${RELEASE_TAG}" \
+              "dist/WebAppViewer-${RELEASE_TAG}.zip" \
+              "dist/WebAppViewer-${RELEASE_TAG}.zip.sha256" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${RELEASE_TAG}" \
+              --generate-notes \
+              --notes-file dist/release-notes.md \
+              --verify-tag
+          fi

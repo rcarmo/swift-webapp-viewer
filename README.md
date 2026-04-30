@@ -69,6 +69,20 @@ Release archives are written to:
 dist/WebAppViewer.zip
 ```
 
+Tagged releases are built by GitHub Actions and attached to GitHub Releases
+with generated release notes. Local stable releases should be prepared with
+`make bump-patch` or `make bump-minor`, committed, verified with `make release`,
+tagged with `make tag-release`, and pushed with the tag.
+
+> [!NOTE]
+> Release builds are ad-hoc signed, not Developer ID signed or notarized. If
+> macOS quarantines a downloaded build, only remove that quarantine bit for a
+> build you trust:
+>
+> ```sh
+> xattr -dr com.apple.quarantine /Applications/WebAppViewer.app
+> ```
+
 ## License
 
 MIT License. Copyright (c) 2026 Rui Carmo.

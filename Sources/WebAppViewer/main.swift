@@ -398,11 +398,12 @@ final class WebAppInstallDialog: NSObject {
     private let initialName: String
     private let pageIconCount: Int
     private var iconChoices: [WebAppIconChoice]
+    private var droppedIconIndex: Int?
 
     private let panel: NSPanel
     private let nameField = NSTextField(frame: .zero)
     private let iconPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-    private let preview = NSImageView(frame: .zero)
+    private let preview = IconDropImageView(frame: .zero)
     private let statusLabel = NSTextField(labelWithString: "Looking for page icons...")
     private let saveButton = NSButton(title: "Save", target: nil, action: nil)
     private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
@@ -425,7 +426,7 @@ final class WebAppInstallDialog: NSObject {
     }
 
     func run() -> WebAppInstallPlan? {
-        refreshIconMenu()
+        refreshIconMenu(selecting: 0)
 
         NSApp.activate(ignoringOtherApps: true)
         panel.center()
@@ -484,6 +485,13 @@ final class WebAppInstallDialog: NSObject {
         preview.frame = NSRect(x: 112, y: 60, width: 80, height: 80)
         preview.image = NSApp.applicationIconImage
         preview.imageScaling = .scaleProportionallyUpOrDown
+        preview.toolTip = "Drop an image here to use it as the app icon."
+        preview.onImageDrop = { [weak self] image, sourceURL in
+            self?.useDroppedIcon(image, sourceURL: sourceURL)
+        }
+        preview.onImageURLDrop = { [weak self] url in
+            self?.loadDroppedIcon(from: url)
+        }
 
         statusLabel.stringValue = "Found \(pageIconCount) page icon\(pageIconCount == 1 ? "" : "s")."
         statusLabel.textColor = .secondaryLabelColor
@@ -512,18 +520,53 @@ final class WebAppInstallDialog: NSObject {
         contentView.addSubview(saveButton)
     }
 
-    private func refreshIconMenu() {
+    private func refreshIconMenu(selecting index: Int) {
         iconPopup.removeAllItems()
         for choice in iconChoices {
             iconPopup.addItem(withTitle: choice.title)
             iconPopup.lastItem?.image = menuImage(from: choice.image)
         }
-        iconPopup.selectItem(at: 0)
-        preview.image = iconChoices.first?.image ?? NSApp.applicationIconImage
+
+        let selectedIndex = iconChoices.indices.contains(index) ? index : 0
+        iconPopup.selectItem(at: selectedIndex)
+        preview.image = iconChoices[selectedIndex].image ?? NSApp.applicationIconImage
     }
 
     @objc private func iconSelectionChanged(_ sender: NSPopUpButton) {
         preview.image = selectedIcon?.image ?? NSApp.applicationIconImage
+    }
+
+    private func useDroppedIcon(_ image: NSImage, sourceURL: URL?) {
+        let choice = WebAppIconChoice(
+            title: "Dropped image \(imagePixelSizeDescription(image))",
+            image: image,
+            sourceURL: sourceURL
+        )
+
+        if let droppedIconIndex,
+           iconChoices.indices.contains(droppedIconIndex) {
+            iconChoices[droppedIconIndex] = choice
+            refreshIconMenu(selecting: droppedIconIndex)
+        } else {
+            iconChoices.insert(choice, at: 0)
+            droppedIconIndex = 0
+            refreshIconMenu(selecting: 0)
+        }
+
+        statusLabel.stringValue = "Using dropped image."
+    }
+
+    private func loadDroppedIcon(from url: URL) {
+        if url.isFileURL,
+           let image = NSImage(contentsOf: url) {
+            useDroppedIcon(image, sourceURL: url)
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            guard let image = await Self.image(at: url) else { return }
+            self?.useDroppedIcon(image, sourceURL: url)
+        }
     }
 
     @objc private func save(_ sender: Any?) {
@@ -541,6 +584,137 @@ final class WebAppInstallDialog: NSObject {
         let copy = source.copy() as? NSImage
         copy?.size = NSSize(width: 18, height: 18)
         return copy
+    }
+
+    private func imagePixelSizeDescription(_ image: NSImage) -> String {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return ""
+        }
+
+        return "(\(cgImage.width)x\(cgImage.height))"
+    }
+
+    private static func image(at url: URL) async -> NSImage? {
+        guard let (data, _) = try? await URLSession.shared.data(from: url),
+              let image = NSImage(data: data),
+              image.isValid else {
+            return nil
+        }
+
+        return image
+    }
+}
+
+final class IconDropImageView: NSImageView {
+    var onImageDrop: ((NSImage, URL?) -> Void)?
+    var onImageURLDrop: ((URL) -> Void)?
+
+    private var isDropTargeted = false {
+        didSet { needsDisplay = true }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        configureDropTarget()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard accepts(sender.draggingPasteboard) else { return [] }
+        isDropTargeted = true
+        return .copy
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        isDropTargeted = false
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        isDropTargeted = false
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        accepts(sender.draggingPasteboard)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        isDropTargeted = false
+        let pasteboard = sender.draggingPasteboard
+
+        if let image = NSImage(pasteboard: pasteboard) {
+            onImageDrop?(image, imageURL(from: pasteboard))
+            return true
+        }
+
+        if let url = imageURL(from: pasteboard) {
+            onImageURLDrop?(url)
+            return true
+        }
+
+        return false
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        guard isDropTargeted else { return }
+        NSColor.controlAccentColor.setStroke()
+        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 8, yRadius: 8)
+        path.lineWidth = 3
+        path.stroke()
+    }
+
+    private func configureDropTarget() {
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        registerForDraggedTypes([.fileURL, .URL, .tiff, .png, .string])
+    }
+
+    private func accepts(_ pasteboard: NSPasteboard) -> Bool {
+        NSImage(pasteboard: pasteboard) != nil || imageURL(from: pasteboard) != nil
+    }
+
+    private func imageURL(from pasteboard: NSPasteboard) -> URL? {
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [
+            .urlReadingContentsConformToTypes: [UTType.image.identifier]
+        ]
+
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL],
+           let url = urls.first {
+            return url
+        }
+
+        for type in [NSPasteboard.PasteboardType.fileURL, .URL, .string] {
+            guard let value = pasteboard.string(forType: type),
+                  let url = imageURL(from: value) else {
+                continue
+            }
+
+            if url.isFileURL || ["http", "https"].contains(url.scheme?.lowercased()) {
+                return url
+            }
+        }
+
+        return nil
+    }
+
+    private func fileURL(from value: String) -> URL? {
+        let expandedPath = (value as NSString).expandingTildeInPath
+        guard FileManager.default.fileExists(atPath: expandedPath) else { return nil }
+        return URL(fileURLWithPath: expandedPath)
+    }
+
+    private func imageURL(from value: String) -> URL? {
+        if let url = URL(string: value),
+           url.scheme != nil {
+            return url
+        }
+
+        return fileURL(from: value)
     }
 }
 
