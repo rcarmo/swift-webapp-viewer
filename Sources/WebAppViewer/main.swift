@@ -791,6 +791,18 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
         webView.reload()
     }
 
+    func zoomIn() {
+        setPageZoom(webView.pageZoom * 1.1)
+    }
+
+    func zoomOut() {
+        setPageZoom(webView.pageZoom / 1.1)
+    }
+
+    func resetZoom() {
+        setPageZoom(1.0)
+    }
+
     var currentURL: URL? {
         webView.url ?? window?.representedURL ?? initialURL
     }
@@ -881,6 +893,10 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
             scrollView.verticalScroller?.isHidden = !visible
             scrollView.horizontalScroller?.isHidden = !visible
         }
+    }
+
+    private func setPageZoom(_ value: CGFloat) {
+        webView.pageZoom = min(max(value, 0.5), 3.0)
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -1173,6 +1189,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         activeBrowserWindow()?.reload()
     }
 
+    @objc private func zoomInPage(_ sender: Any?) {
+        activeBrowserWindow()?.zoomIn()
+    }
+
+    @objc private func zoomOutPage(_ sender: Any?) {
+        activeBrowserWindow()?.zoomOut()
+    }
+
+    @objc private func resetPageZoom(_ sender: Any?) {
+        activeBrowserWindow()?.resetZoom()
+    }
+
     @objc private func installURLAsApp(_ sender: Any?) {
         let activeWindow = activeBrowserWindow()
         guard let url = promptForAppInstallURL() else { return }
@@ -1346,6 +1374,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             withTitle: "Reload Page",
             action: #selector(AppDelegate.reloadPage(_:)),
             keyEquivalent: "r"
+        )
+        viewMenu.addItem(.separator())
+        viewMenu.addItem(
+            withTitle: "Zoom In",
+            action: #selector(AppDelegate.zoomInPage(_:)),
+            keyEquivalent: "+"
+        )
+        viewMenu.addItem(
+            withTitle: "Zoom Out",
+            action: #selector(AppDelegate.zoomOutPage(_:)),
+            keyEquivalent: "-"
+        )
+        viewMenu.addItem(
+            withTitle: "Actual Size",
+            action: #selector(AppDelegate.resetPageZoom(_:)),
+            keyEquivalent: "0"
         )
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
