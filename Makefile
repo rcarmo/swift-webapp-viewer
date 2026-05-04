@@ -92,6 +92,7 @@ $(APP_BUNDLE): $(APP_SOURCES) $(PLIST) $(ICON) $(ENTITLEMENTS) $(SHARE_EXTENSION
 		-framework AppKit \
 		-framework WebKit \
 		-framework UniformTypeIdentifiers \
+		-framework UserNotifications \
 		-o "$(EXECUTABLE)" \
 		$(APP_SOURCES)
 	if [ -d "$(EXECUTABLE).dSYM" ]; then \

@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import UniformTypeIdentifiers
+import UserNotifications
 import WebKit
 
 private enum AppConfig {
@@ -162,12 +163,14 @@ final class MouseHoverTrackingView: NSView {
 
 final class StartupDropView: NSView {
     private let onURL: (URL) -> Void
-    private let titleLabel = NSTextField(labelWithString: "Drop a URL to open it")
-    private let detailLabel = NSTextField(labelWithString: "Drag a link, .webloc file, or plain-text URL here.")
+    private let titleLabel = NSTextField(labelWithString: "Drop or paste a URL to open it")
+    private let detailLabel = NSTextField(labelWithString: "Drag a link, .webloc file, plain-text URL, or paste a URL here.")
     private let iconView = NSImageView()
     private var isDragTargeted = false {
         didSet { updateAppearance() }
     }
+
+    override var acceptsFirstResponder: Bool { true }
 
     init(onURL: @escaping (URL) -> Void) {
         self.onURL = onURL
@@ -200,6 +203,11 @@ final class StartupDropView: NSView {
         isDragTargeted = false
     }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.makeFirstResponder(self)
+    }
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         updateAppearance()
@@ -213,6 +221,15 @@ final class StartupDropView: NSView {
 
         onURL(url)
         return true
+    }
+
+    @objc func paste(_ sender: Any?) {
+        guard let url = PasteboardURLReader.url(from: .general) else {
+            NSSound.beep()
+            return
+        }
+
+        onURL(url)
     }
 
     private func dragOperation(for sender: NSDraggingInfo) -> NSDragOperation {
@@ -718,9 +735,80 @@ final class IconDropImageView: NSImageView {
     }
 }
 
-final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
+private enum WebNotificationBridge {
+    static let messageHandlerName = "webAppViewerNotification"
+
+    static let script = """
+    (() => {
+      if (window.__webAppViewerNotificationBridgeInstalled) return;
+      const native = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.webAppViewerNotification;
+      if (!native) return;
+
+      window.__webAppViewerNotificationBridgeInstalled = true;
+      let permission = "default";
+      let nextPermissionRequest = 1;
+      const pendingPermissionRequests = new Map();
+
+      function post(message) {
+        try {
+          native.postMessage(message);
+        } catch (_) {}
+      }
+
+      function completePermissionRequest(id, value) {
+        permission = value;
+        const complete = pendingPermissionRequests.get(String(id));
+        if (!complete) return;
+        pendingPermissionRequests.delete(String(id));
+        complete(value);
+      }
+
+      function WebAppViewerNotification(title, options) {
+        options = options || {};
+        this.title = String(title || "");
+        this.body = options.body ? String(options.body) : "";
+        this.tag = options.tag ? String(options.tag) : "";
+        this.icon = options.icon ? String(options.icon) : "";
+        this.close = function() {};
+
+        if (permission === "granted") {
+          post({
+            type: "show",
+            title: this.title,
+            body: this.body,
+            tag: this.tag,
+            icon: this.icon,
+            url: window.location.href
+          });
+        }
+      }
+
+      WebAppViewerNotification.requestPermission = function(callback) {
+        const id = String(nextPermissionRequest++);
+        post({ type: "requestPermission", id });
+
+        return new Promise((resolve) => {
+          pendingPermissionRequests.set(id, (value) => {
+            if (typeof callback === "function") callback(value);
+            resolve(value);
+          });
+        });
+      };
+
+      Object.defineProperty(WebAppViewerNotification, "permission", {
+        get() { return permission; }
+      });
+
+      window.__webAppViewerNotificationPermissionResult = completePermissionRequest;
+      window.Notification = WebAppViewerNotification;
+    })();
+    """
+}
+
+final class BrowserWindowController: NSWindowController, WKNavigationDelegate, WKDownloadDelegate, WKScriptMessageHandler, UNUserNotificationCenterDelegate {
     private let webView: WKWebView
     private let initialURL: URL
+    private var activeDownloads: [ObjectIdentifier: WKDownload] = [:]
 
     init(url: URL) {
         self.initialURL = url
@@ -728,6 +816,13 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.websiteDataStore = .default()
+        configuration.userContentController.addUserScript(
+            WKUserScript(
+                source: WebNotificationBridge.script,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: false
+            )
+        )
 
         self.webView = WKWebView(frame: .zero, configuration: configuration)
         self.webView.allowsBackForwardNavigationGestures = true
@@ -768,6 +863,8 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
         super.init(window: window)
 
         webView.navigationDelegate = self
+        configuration.userContentController.add(self, name: WebNotificationBridge.messageHandlerName)
+        UNUserNotificationCenter.current().delegate = self
         window.delegate = self
         contentView.onMouseHoverChanged = { [weak self] isMouseOverWindow in
             self?.setBrowserChromeVisible(isMouseOverWindow)
@@ -779,6 +876,12 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        webView.configuration.userContentController.removeScriptMessageHandler(
+            forName: WebNotificationBridge.messageHandlerName
+        )
     }
 
     func load(_ url: URL) {
@@ -915,6 +1018,11 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
             return
         }
 
+        if navigationAction.shouldPerformDownload {
+            decisionHandler(.download)
+            return
+        }
+
         if shouldOpenInSafari(url, navigationAction: navigationAction) {
             openInSafari(url)
             decisionHandler(.cancel)
@@ -928,6 +1036,69 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
         }
 
         decisionHandler(.allow)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationResponse: WKNavigationResponse,
+        decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+    ) {
+        if navigationResponse.canShowMIMEType {
+            decisionHandler(.allow)
+        } else {
+            decisionHandler(.download)
+        }
+    }
+
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        track(download)
+    }
+
+    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+        track(download)
+    }
+
+    func download(
+        _ download: WKDownload,
+        decideDestinationUsing response: URLResponse,
+        suggestedFilename: String,
+        completionHandler: @escaping (URL?) -> Void
+    ) {
+        completionHandler(downloadDestination(for: suggestedFilename))
+    }
+
+    func downloadDidFinish(_ download: WKDownload) {
+        activeDownloads.removeValue(forKey: ObjectIdentifier(download))
+    }
+
+    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+        activeDownloads.removeValue(forKey: ObjectIdentifier(download))
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == WebNotificationBridge.messageHandlerName,
+              let payload = message.body as? [String: Any],
+              let type = payload["type"] as? String else {
+            return
+        }
+
+        switch type {
+        case "requestPermission":
+            guard let requestID = payload["id"] as? String else { return }
+            requestNotificationPermission(requestID: requestID)
+        case "show":
+            presentNotification(from: payload)
+        default:
+            break
+        }
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list, .sound])
     }
 
     private func shouldOpenInSafari(
@@ -948,6 +1119,122 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         NSWorkspace.shared.open([url], withApplicationAt: safariURL, configuration: configuration)
+    }
+
+    private func track(_ download: WKDownload) {
+        activeDownloads[ObjectIdentifier(download)] = download
+        download.delegate = self
+    }
+
+    private func downloadDestination(for suggestedFilename: String) -> URL {
+        let fileManager = FileManager.default
+        let downloadsDirectory = fileManager.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? fileManager.homeDirectoryForCurrentUser
+        let filename = sanitizedDownloadFilename(suggestedFilename)
+        let baseURL = downloadsDirectory.appendingPathComponent(filename, isDirectory: false)
+
+        guard fileManager.fileExists(atPath: baseURL.path) else {
+            return baseURL
+        }
+
+        let fileExtension = baseURL.pathExtension
+        let basename = baseURL.deletingPathExtension().lastPathComponent
+
+        for index in 2...999 {
+            let candidateName: String
+            if fileExtension.isEmpty {
+                candidateName = "\(basename) \(index)"
+            } else {
+                candidateName = "\(basename) \(index).\(fileExtension)"
+            }
+
+            let candidateURL = downloadsDirectory.appendingPathComponent(candidateName, isDirectory: false)
+            if !fileManager.fileExists(atPath: candidateURL.path) {
+                return candidateURL
+            }
+        }
+
+        return downloadsDirectory.appendingPathComponent(UUID().uuidString, isDirectory: false)
+    }
+
+    private func sanitizedDownloadFilename(_ value: String) -> String {
+        let forbidden = CharacterSet(charactersIn: "/:\\")
+            .union(.newlines)
+            .union(.controlCharacters)
+        let cleaned = value
+            .components(separatedBy: forbidden)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return cleaned.nilIfBlank ?? "download"
+    }
+
+    private func requestNotificationPermission(requestID: String) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { [weak self] granted, _ in
+            DispatchQueue.main.async {
+                self?.resolveNotificationPermission(
+                    requestID: requestID,
+                    permission: granted ? "granted" : "denied"
+                )
+            }
+        }
+    }
+
+    private func resolveNotificationPermission(requestID: String, permission: String) {
+        let script = """
+        window.__webAppViewerNotificationPermissionResult && window.__webAppViewerNotificationPermissionResult(\(javaScriptStringLiteral(requestID)), \(javaScriptStringLiteral(permission)));
+        """
+        webView.evaluateJavaScript(script)
+    }
+
+    private func presentNotification(from payload: [String: Any]) {
+        let notificationCenter = UNUserNotificationCenter.current()
+        notificationCenter.getNotificationSettings { [weak self] settings in
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral:
+                self?.addNotification(from: payload)
+            case .notDetermined:
+                notificationCenter.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+                    guard granted else { return }
+                    self?.addNotification(from: payload)
+                }
+            case .denied:
+                return
+            @unknown default:
+                return
+            }
+        }
+    }
+
+    private func addNotification(from payload: [String: Any]) {
+        let content = UNMutableNotificationContent()
+        content.title = (payload["title"] as? String)?.nilIfBlank ?? AppConfig.displayName
+        content.body = (payload["body"] as? String)?.nilIfBlank ?? ""
+        content.sound = .default
+
+        if let tag = (payload["tag"] as? String)?.nilIfBlank {
+            content.threadIdentifier = tag
+        }
+
+        if let url = (payload["url"] as? String)?.nilIfBlank {
+            content.userInfo = ["url": url]
+        }
+
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    private func javaScriptStringLiteral(_ value: String) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: [value]),
+              let arrayLiteral = String(data: data, encoding: .utf8) else {
+            return "\"\""
+        }
+
+        return String(arrayLiteral.dropFirst().dropLast())
     }
 }
 
