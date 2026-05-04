@@ -10,6 +10,8 @@ This app takes the opposite stance:
 - keep the titlebar visually quiet
 - hide the traffic lights and scrollbars when the pointer is away
 - leave only a small invisible strip for dragging the window
-- accept URLs from Dock drops, Services, the Share sheet, and a custom URL scheme
+- accept URLs from Dock drops, paste, Services, the Share sheet, and a custom URL scheme
+- keep app-local navigation in the wrapper while sending external links to Safari
+- cover practical app-shell needs such as downloads and foreground notifications
 
 It is intentionally small and hackable. To make it your own site wrapper, change `DefaultWebAppURL` in `Info.plist`, replace the icons in `docs/`, and rebuild.

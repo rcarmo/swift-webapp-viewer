@@ -9,12 +9,17 @@ This exists because Safari Web Apps still feel like they bring too much browser 
 ## Behavior
 
 - Opens `DefaultWebAppURL` from `Info.plist` on launch when configured.
-- Shows a small drop window on launch when no default URL is configured.
-- Creates a fresh blank drop window with Command-N.
+- Shows a small drop/paste window on launch when no default URL is configured.
+- Opens another window for the same web app with Command-N.
 - Opens every supplied URL in a new window.
 - Installs the current or entered URL as its own app in `~/Applications`, with a chance to rename it and pick from detected manifest or favicon images before saving.
+- Lets you drop a custom image onto the installer icon preview to use it as the app icon.
 - Uses an invisible draggable strip at the top of each window, starting just to the right of the traffic lights.
 - Shows the traffic-light controls and scrollbars only while the pointer is over the window.
+- Keeps same-origin links inside the web app, opens same-origin new-window links in another app window, and sends external links to Safari.
+- Supports file downloads to `~/Downloads`.
+- Supports foreground page notifications through the standard `Notification` API while the app is running.
+- Provides standard macOS shortcuts for window close, reload, page zoom, edit actions, minimize, and quit.
 - Accepts `.webloc`, `public.url`, and plain text URL drops on the Dock icon.
 - Adds an "Open in Web App Viewer" macOS Service for selected URLs or URL-like text.
 - Includes a macOS Share Extension that forwards shared URLs to a new app window.
@@ -35,7 +40,11 @@ Edit `DefaultWebAppURL` in `Info.plist`:
 <string>https://your-site.example</string>
 ```
 
-Leave it blank to choose a URL by dragging a link, `.webloc` file, or plain-text URL onto the startup window.
+Leave it blank to choose a URL by dragging a link, `.webloc` file, or plain-text URL onto the startup window, or by pasting a URL into that window.
+
+## Web Features
+
+Web App Viewer is a focused wrapper, not a full browser. It supports normal in-page navigation, JavaScript, downloads, foreground notifications, and page zoom. It does not implement background Web Push, browser extensions, tabs, bookmarks, or a persistent address bar.
 
 ## Build
 
