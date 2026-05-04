@@ -1366,6 +1366,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func windowDidClose(_ controller: BrowserWindowController) {
         windows.removeAll { $0 === controller }
+        terminateIfNoWindowsRemain()
     }
 
     private func activeBrowserWindow() -> BrowserWindowController? {
@@ -1421,6 +1422,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func blankWindowDidClose(_ controller: StartupWindowController) {
         blankWindows.removeAll { $0 === controller }
+        terminateIfNoWindowsRemain()
+    }
+
+    private func terminateIfNoWindowsRemain() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self,
+                  self.windows.isEmpty,
+                  self.blankWindows.isEmpty else {
+                return
+            }
+
+            NSApp.terminate(nil)
+        }
     }
 
     @objc private func handleGetURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
