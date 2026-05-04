@@ -36,7 +36,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.6</string>
+	<string>1.0.7</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -49,7 +49,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>202604301856</string>
+	<string>202605041033</string>
 	<key>DefaultWebAppURL</key>
 	<string></string>
 	<key>LSMinimumSystemVersion</key>
