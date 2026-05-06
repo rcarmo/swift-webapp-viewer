@@ -890,13 +890,136 @@ private final class UserScriptStore {
     }
 
     private static func loadScripts(from defaults: UserDefaults, key: String) -> [UserScriptConfiguration] {
+        guard defaults.object(forKey: key) != nil else {
+            return [hackerNewsDarkModeExample]
+        }
+
         guard let data = defaults.data(forKey: key),
               let scripts = try? JSONDecoder().decode([UserScriptConfiguration].self, from: data) else {
-            return []
+            return [hackerNewsDarkModeExample]
         }
 
         return scripts
     }
+
+    private static let hackerNewsDarkModeExample = UserScriptConfiguration(
+        isEnabled: false,
+        name: "Example: Hacker News Dark Mode",
+        urlPattern: #"https://news\.ycombinator\.com/.*"#,
+        source: #"""
+        // Example user script for Web App Viewer.
+        // Attribution: adapted from Hacker News - Dark Theme by Jesse Tolj
+        // (MIT License, https://greasyfork.org/en/scripts/510432-hacker-news-dark-theme)
+        // with additional inspiration from susam/userscript Dark HN
+        // (MIT License, https://github.com/susam/userscript).
+
+        const styleID = "webappviewer-hn-dark-mode";
+        document.getElementById(styleID)?.remove();
+
+        const style = document.createElement("style");
+        style.id = styleID;
+        style.textContent = `
+          :root {
+            color-scheme: dark;
+          }
+
+          html,
+          body,
+          center,
+          #hnmain {
+            background: #111315 !important;
+            color: #d7d7d7 !important;
+          }
+
+          #hnmain {
+            border-collapse: collapse;
+          }
+
+          .pagetop,
+          .pagetop a,
+          .hnname a {
+            background: #ff6600 !important;
+            color: #1b1208 !important;
+          }
+
+          .title,
+          .title a,
+          .titleline,
+          .titleline a {
+            color: #f0f0f0 !important;
+          }
+
+          .subtext,
+          .subtext a,
+          .yclinks,
+          .yclinks a,
+          .sitestr,
+          .score,
+          .age,
+          .hnuser {
+            color: #9aa4ad !important;
+          }
+
+          a:link {
+            color: #f0f0f0 !important;
+          }
+
+          a:visited {
+            color: #a8a8b8 !important;
+          }
+
+          a:hover {
+            color: #ffffff !important;
+            text-decoration: underline !important;
+          }
+
+          .comment,
+          .commtext,
+          .commtext p,
+          .comment-tree {
+            color: #d0d0d0 !important;
+          }
+
+          .comhead,
+          .comhead a {
+            color: #9aa4ad !important;
+          }
+
+          textarea,
+          input[type="text"],
+          input[type="password"] {
+            background: #1b1f24 !important;
+            color: #f0f0f0 !important;
+            border: 1px solid #3a414a !important;
+          }
+
+          input[type="submit"],
+          button {
+            background: #252b31 !important;
+            color: #f0f0f0 !important;
+            border: 1px solid #46505a !important;
+          }
+
+          .votelinks {
+            opacity: 0.65;
+          }
+
+          .votearrow {
+            filter: invert(1) brightness(1.5);
+          }
+
+          tr.spacer {
+            background: #111315 !important;
+          }
+
+          td {
+            background: transparent !important;
+          }
+        `;
+
+        document.documentElement.appendChild(style);
+        """#
+    )
 }
 
 private final class JavaScriptCodeTextView: NSTextView {

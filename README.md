@@ -57,6 +57,8 @@ Open Preferences to add JavaScript snippets that run after matching pages finish
 - a URL regular expression matched against the full page URL
 - a JavaScript editor with syntax highlighting
 
+Fresh preference stores include a disabled Hacker News dark-mode example with source attribution in the script comments.
+
 Generated web apps have their own bundle identifiers and preference stores, so configure user scripts inside the generated app you want to customize. Recreate or replace an existing generated app after installing a newer Web App Viewer build if you want that generated app to inherit newly added app features.
 
 To debug a page or script, enable Safari's Develop menu and choose the matching Web App Viewer page from that menu. Embedded web views are inspectable.
