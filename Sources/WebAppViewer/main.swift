@@ -1284,8 +1284,6 @@ private final class UserScriptStore {
             });
           }
 
-          observeUsers();
-
           const mutationObserver = new MutationObserver((mutations) => {
             for (const mutation of mutations) {
               for (const node of mutation.addedNodes) {
@@ -1296,8 +1294,18 @@ private final class UserScriptStore {
             }
           });
 
+          function startAvatars() {
+            observeUsers();
+
+            if (document.body) {
+              mutationObserver.observe(document.body, { childList: true, subtree: true });
+            }
+          }
+
           if (document.body) {
-            mutationObserver.observe(document.body, { childList: true, subtree: true });
+            startAvatars();
+          } else {
+            document.addEventListener("DOMContentLoaded", startAvatars, { once: true });
           }
         }
         """#
