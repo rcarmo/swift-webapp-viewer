@@ -232,6 +232,7 @@ final class StartupDropView: NSView {
     }
 
     override var acceptsFirstResponder: Bool { true }
+    override var mouseDownCanMoveWindow: Bool { true }
 
     init(onURL: @escaping (URL) -> Void) {
         self.onURL = onURL
@@ -274,6 +275,14 @@ final class StartupDropView: NSView {
         updateAppearance()
     }
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        bounds.contains(point) ? self : nil
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        PasteboardURLReader.url(from: sender.draggingPasteboard) != nil
+    }
+
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         isDragTargeted = false
         guard let url = PasteboardURLReader.url(from: sender.draggingPasteboard) else {
@@ -291,6 +300,16 @@ final class StartupDropView: NSView {
         }
 
         onURL(url)
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command),
+              event.charactersIgnoringModifiers?.lowercased() == "v" else {
+            return super.performKeyEquivalent(with: event)
+        }
+
+        paste(nil)
+        return true
     }
 
     private func dragOperation(for sender: NSDraggingInfo) -> NSDragOperation {
@@ -352,10 +371,12 @@ final class StartupDropView: NSView {
 
 final class StartupWindowController: NSWindowController, NSWindowDelegate {
     var onClose: (() -> Void)?
+    private let dropView: StartupDropView
 
     init(openURL: @escaping (URL) -> Void) {
         let contentView = NSView()
         let dropView = StartupDropView(onURL: openURL)
+        self.dropView = dropView
         dropView.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(dropView)
 
@@ -376,6 +397,7 @@ final class StartupWindowController: NSWindowController, NSWindowDelegate {
         window.title = AppConfig.displayName
         window.contentView = contentView
         window.minSize = NSSize(width: 360, height: 190)
+        window.isMovableByWindowBackground = true
 
         super.init(window: window)
         window.delegate = self
@@ -384,6 +406,11 @@ final class StartupWindowController: NSWindowController, NSWindowDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func showWindow(_ sender: Any?) {
+        super.showWindow(sender)
+        window?.makeFirstResponder(dropView)
     }
 
     func windowWillClose(_ notification: Notification) {
