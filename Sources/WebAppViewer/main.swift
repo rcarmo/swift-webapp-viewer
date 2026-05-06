@@ -1023,10 +1023,13 @@ private final class UserScriptStore {
             --hn-text-strong: #f5f5f5;
             --hn-text-muted: #a3a3a3;
             --hn-text-faint: #737373;
+            --hn-title: #f5f5f5;
+            --hn-title-visited: #cbd5e1;
+            --hn-header-link: #fff7ed;
             --hn-border: #404040;
             --hn-link: #f97316;
             --hn-link-hover: #fb923c;
-            --hn-link-visited: #a16207;
+            --hn-link-visited: #d97706;
             --hn-input-background: #171717;
             --hn-input-border: #525252;
             --hn-warning-background: #7f1d1d;
@@ -1056,13 +1059,13 @@ private final class UserScriptStore {
 
           :root[data-webappviewer-hn-theme="dark"] .pagetop {
             height: 28px !important;
-            color: var(--hn-accent-text) !important;
+            color: var(--hn-header-link) !important;
           }
 
           :root[data-webappviewer-hn-theme="dark"] .pagetop a,
           :root[data-webappviewer-hn-theme="dark"] .hnname a {
             background: transparent !important;
-            color: var(--hn-accent-text) !important;
+            color: var(--hn-header-link) !important;
             font-weight: 600 !important;
           }
 
@@ -1070,7 +1073,7 @@ private final class UserScriptStore {
           :root[data-webappviewer-hn-theme="dark"] .title a,
           :root[data-webappviewer-hn-theme="dark"] .titleline,
           :root[data-webappviewer-hn-theme="dark"] .titleline a {
-            color: var(--hn-text-strong) !important;
+            color: var(--hn-title) !important;
           }
 
           :root[data-webappviewer-hn-theme="dark"] .subtext,
@@ -1097,6 +1100,55 @@ private final class UserScriptStore {
             text-decoration: underline !important;
           }
 
+          :root[data-webappviewer-hn-theme="dark"] .pagetop,
+          :root[data-webappviewer-hn-theme="dark"] .pagetop font,
+          :root[data-webappviewer-hn-theme="dark"] .pagetop b,
+          :root[data-webappviewer-hn-theme="dark"] .pagetop a,
+          :root[data-webappviewer-hn-theme="dark"] .pagetop a:link,
+          :root[data-webappviewer-hn-theme="dark"] .pagetop a:visited,
+          :root[data-webappviewer-hn-theme="dark"] .pagetop a:hover,
+          :root[data-webappviewer-hn-theme="dark"] .hnname,
+          :root[data-webappviewer-hn-theme="dark"] .hnname a,
+          :root[data-webappviewer-hn-theme="dark"] .hnname a:link,
+          :root[data-webappviewer-hn-theme="dark"] .hnname a:visited,
+          :root[data-webappviewer-hn-theme="dark"] .hnname a:hover {
+            color: var(--hn-header-link) !important;
+          }
+
+          :root[data-webappviewer-hn-theme="dark"] .title,
+          :root[data-webappviewer-hn-theme="dark"] .title a,
+          :root[data-webappviewer-hn-theme="dark"] .title a:link,
+          :root[data-webappviewer-hn-theme="dark"] .titleline,
+          :root[data-webappviewer-hn-theme="dark"] .titleline a,
+          :root[data-webappviewer-hn-theme="dark"] .titleline a:link,
+          :root[data-webappviewer-hn-theme="dark"] .morelink,
+          :root[data-webappviewer-hn-theme="dark"] .morelink:link {
+            color: var(--hn-title) !important;
+          }
+
+          :root[data-webappviewer-hn-theme="dark"] .title a:visited,
+          :root[data-webappviewer-hn-theme="dark"] .titleline a:visited,
+          :root[data-webappviewer-hn-theme="dark"] .morelink:visited {
+            color: var(--hn-title-visited) !important;
+          }
+
+          :root[data-webappviewer-hn-theme="dark"] .subtext,
+          :root[data-webappviewer-hn-theme="dark"] .subtext a,
+          :root[data-webappviewer-hn-theme="dark"] .subtext a:link,
+          :root[data-webappviewer-hn-theme="dark"] .subtext a:visited,
+          :root[data-webappviewer-hn-theme="dark"] .yclinks,
+          :root[data-webappviewer-hn-theme="dark"] .yclinks a,
+          :root[data-webappviewer-hn-theme="dark"] .yclinks a:link,
+          :root[data-webappviewer-hn-theme="dark"] .yclinks a:visited,
+          :root[data-webappviewer-hn-theme="dark"] .sitestr,
+          :root[data-webappviewer-hn-theme="dark"] .score,
+          :root[data-webappviewer-hn-theme="dark"] .age,
+          :root[data-webappviewer-hn-theme="dark"] .hnuser,
+          :root[data-webappviewer-hn-theme="dark"] .hnuser:link,
+          :root[data-webappviewer-hn-theme="dark"] .hnuser:visited {
+            color: var(--hn-text-muted) !important;
+          }
+
           :root[data-webappviewer-hn-theme="dark"] .comment,
           :root[data-webappviewer-hn-theme="dark"] .commtext,
           :root[data-webappviewer-hn-theme="dark"] .commtext p,
@@ -1106,7 +1158,10 @@ private final class UserScriptStore {
           }
 
           :root[data-webappviewer-hn-theme="dark"] .comhead,
-          :root[data-webappviewer-hn-theme="dark"] .comhead a {
+          :root[data-webappviewer-hn-theme="dark"] .comhead a,
+          :root[data-webappviewer-hn-theme="dark"] .comhead a:link,
+          :root[data-webappviewer-hn-theme="dark"] .comhead a:visited,
+          :root[data-webappviewer-hn-theme="dark"] font[color="#828282"] {
             color: var(--hn-text-muted) !important;
           }
 
