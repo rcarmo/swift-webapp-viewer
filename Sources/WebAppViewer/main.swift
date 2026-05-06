@@ -277,21 +277,14 @@ final class StartupDropView: NSView {
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         isDragTargeted = false
-        guard let url = PasteboardURLReader.url(from: sender.draggingPasteboard) else {
-            return false
-        }
-
-        onURL(url)
-        return true
+        return openURL(from: sender.draggingPasteboard)
     }
 
     @objc func paste(_ sender: Any?) {
-        guard let url = PasteboardURLReader.url(from: .general) else {
+        guard openURL(from: .general) else {
             NSSound.beep()
             return
         }
-
-        onURL(url)
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -301,6 +294,19 @@ final class StartupDropView: NSView {
         }
 
         paste(nil)
+        return true
+    }
+
+    func setDragTargeted(_ value: Bool) {
+        isDragTargeted = value
+    }
+
+    func openURL(from pasteboard: NSPasteboard) -> Bool {
+        guard let url = PasteboardURLReader.url(from: pasteboard) else {
+            return false
+        }
+
+        onURL(url)
         return true
     }
 
@@ -361,23 +367,86 @@ final class StartupDropView: NSView {
     }
 }
 
+final class StartupContentView: NSView {
+    private let dropView: StartupDropView
+
+    override var acceptsFirstResponder: Bool { true }
+    override var mouseDownCanMoveWindow: Bool { true }
+
+    init(dropView: StartupDropView) {
+        self.dropView = dropView
+        super.init(frame: .zero)
+
+        registerForDraggedTypes([.URL, .fileURL, .string])
+        dropView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(dropView)
+
+        NSLayoutConstraint.activate([
+            dropView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 24),
+            dropView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -24),
+            dropView.topAnchor.constraint(equalTo: topAnchor, constant: 24),
+            dropView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -24)
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.makeFirstResponder(self)
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        dragOperation(for: sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        dragOperation(for: sender)
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        dropView.setDragTargeted(false)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        dropView.setDragTargeted(false)
+        return dropView.openURL(from: sender.draggingPasteboard)
+    }
+
+    @objc func paste(_ sender: Any?) {
+        dropView.paste(sender)
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command),
+              event.charactersIgnoringModifiers?.lowercased() == "v" else {
+            return super.performKeyEquivalent(with: event)
+        }
+
+        paste(nil)
+        return true
+    }
+
+    private func dragOperation(for sender: NSDraggingInfo) -> NSDragOperation {
+        let hasURL = PasteboardURLReader.url(from: sender.draggingPasteboard) != nil
+        dropView.setDragTargeted(hasURL)
+        return hasURL ? .copy : []
+    }
+}
+
 final class StartupWindowController: NSWindowController, NSWindowDelegate {
     var onClose: (() -> Void)?
     private let dropView: StartupDropView
+    private let startupContentView: StartupContentView
 
     init(openURL: @escaping (URL) -> Void) {
-        let contentView = NSView()
         let dropView = StartupDropView(onURL: openURL)
+        let contentView = StartupContentView(dropView: dropView)
         self.dropView = dropView
-        dropView.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(dropView)
-
-        NSLayoutConstraint.activate([
-            dropView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
-            dropView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
-            dropView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 24),
-            dropView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -24)
-        ])
+        self.startupContentView = contentView
 
         let window = NSWindow(
             contentRect: NSRect(x: 160, y: 160, width: 440, height: 220),
@@ -402,11 +471,15 @@ final class StartupWindowController: NSWindowController, NSWindowDelegate {
 
     override func showWindow(_ sender: Any?) {
         super.showWindow(sender)
-        window?.makeFirstResponder(dropView)
+        window?.makeFirstResponder(startupContentView)
     }
 
     func pasteURL(_ sender: Any?) {
-        dropView.paste(sender)
+        startupContentView.paste(sender)
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        window?.makeFirstResponder(startupContentView)
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -3081,11 +3154,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(NSText.copy(_:)),
             keyEquivalent: "c"
         )
-        editMenu.addItem(
+        let pasteItem = editMenu.addItem(
             withTitle: "Paste",
             action: #selector(AppDelegate.pasteFromMenu(_:)),
             keyEquivalent: "v"
         )
+        pasteItem.target = Self.shared
         editMenu.addItem(
             withTitle: "Delete",
             action: #selector(NSText.delete(_:)),
