@@ -1419,10 +1419,6 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
         patternField.delegate = self
         patternField.translatesAutoresizingMaskIntoConstraints = false
 
-        let codeLabel = NSTextField(labelWithString: "JavaScript:")
-        codeLabel.alignment = .right
-        codeLabel.translatesAutoresizingMaskIntoConstraints = false
-
         codeView.delegate = self
         let codeScrollView = NSScrollView()
         codeScrollView.borderType = .bezelBorder
@@ -1442,17 +1438,17 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        for view in [nameLabel, nameField, patternLabel, patternField, codeLabel, codeScrollView, statusLabel] {
+        for view in [nameLabel, nameField, patternLabel, patternField, codeScrollView, statusLabel] {
             container.addSubview(view)
         }
 
         NSLayoutConstraint.activate([
-            nameLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 24),
+            nameLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
             nameLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 28),
-            nameLabel.widthAnchor.constraint(equalToConstant: 86),
+            nameLabel.widthAnchor.constraint(equalToConstant: 78),
 
-            nameField.leadingAnchor.constraint(equalTo: nameLabel.trailingAnchor, constant: 12),
-            nameField.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -24),
+            nameField.leadingAnchor.constraint(equalTo: nameLabel.trailingAnchor, constant: 8),
+            nameField.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
             nameField.centerYAnchor.constraint(equalTo: nameLabel.centerYAnchor),
 
             patternLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
@@ -1462,10 +1458,6 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
             patternField.leadingAnchor.constraint(equalTo: nameField.leadingAnchor),
             patternField.trailingAnchor.constraint(equalTo: nameField.trailingAnchor),
             patternField.centerYAnchor.constraint(equalTo: patternLabel.centerYAnchor),
-
-            codeLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
-            codeLabel.topAnchor.constraint(equalTo: patternLabel.bottomAnchor, constant: 22),
-            codeLabel.widthAnchor.constraint(equalTo: nameLabel.widthAnchor),
 
             codeScrollView.leadingAnchor.constraint(equalTo: nameField.leadingAnchor),
             codeScrollView.trailingAnchor.constraint(equalTo: nameField.trailingAnchor),
