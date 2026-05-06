@@ -777,6 +777,520 @@ final class IconDropImageView: NSImageView {
     }
 }
 
+private struct UserScriptConfiguration: Codable, Equatable, Identifiable {
+    var id: UUID
+    var name: String
+    var urlPattern: String
+    var source: String
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        urlPattern: String,
+        source: String
+    ) {
+        self.id = id
+        self.name = name
+        self.urlPattern = urlPattern
+        self.source = source
+    }
+
+    var displayName: String {
+        name.nilIfBlank ?? "Untitled Script"
+    }
+
+    var trimmedSource: String? {
+        source.nilIfBlank
+    }
+
+    func matches(_ url: URL) -> Bool {
+        let pattern = urlPattern.nilIfBlank ?? ".*"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return false
+        }
+
+        let value = url.absoluteString
+        let range = NSRange(location: 0, length: (value as NSString).length)
+        return regex.firstMatch(in: value, range: range) != nil
+    }
+
+    func hasValidPattern() -> Bool {
+        (try? NSRegularExpression(pattern: urlPattern.nilIfBlank ?? ".*")) != nil
+    }
+}
+
+private final class UserScriptStore {
+    static let shared = UserScriptStore()
+    static let didChangeNotification = Notification.Name("WebAppViewerUserScriptsDidChange")
+
+    private let defaultsKey = "UserScripts"
+    private let defaults: UserDefaults
+    private(set) var scripts: [UserScriptConfiguration]
+
+    private init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        self.scripts = Self.loadScripts(from: defaults, key: defaultsKey)
+    }
+
+    @discardableResult
+    func addScript() -> UserScriptConfiguration {
+        let script = UserScriptConfiguration(
+            name: "New Script",
+            urlPattern: ".*",
+            source: """
+            // JavaScript runs after matching pages finish loading.
+            console.log("Web App Viewer user script loaded", location.href);
+            """
+        )
+        scripts.append(script)
+        save()
+        return script
+    }
+
+    func update(_ script: UserScriptConfiguration) {
+        guard let index = scripts.firstIndex(where: { $0.id == script.id }) else { return }
+        scripts[index] = script
+        save()
+    }
+
+    func removeScript(id: UUID) {
+        scripts.removeAll { $0.id == id }
+        save()
+    }
+
+    func scripts(matching url: URL) -> [UserScriptConfiguration] {
+        scripts.filter { $0.matches(url) && $0.trimmedSource != nil }
+    }
+
+    private func save() {
+        if let data = try? JSONEncoder().encode(scripts) {
+            defaults.set(data, forKey: defaultsKey)
+        }
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
+    }
+
+    private static func loadScripts(from defaults: UserDefaults, key: String) -> [UserScriptConfiguration] {
+        guard let data = defaults.data(forKey: key),
+              let scripts = try? JSONDecoder().decode([UserScriptConfiguration].self, from: data) else {
+            return []
+        }
+
+        return scripts
+    }
+}
+
+private final class JavaScriptCodeTextView: NSTextView {
+    private let editorFont = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
+    private var isHighlighting = false
+
+    override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
+        super.init(frame: frameRect, textContainer: container)
+        configure()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func setCode(_ value: String) {
+        string = value
+        highlightSyntax()
+    }
+
+    override func didChangeText() {
+        super.didChangeText()
+        highlightSyntax()
+    }
+
+    private func configure() {
+        isRichText = false
+        isAutomaticQuoteSubstitutionEnabled = false
+        isAutomaticDashSubstitutionEnabled = false
+        isAutomaticTextReplacementEnabled = false
+        isAutomaticSpellingCorrectionEnabled = false
+        allowsUndo = true
+        font = editorFont
+        textColor = .textColor
+        insertionPointColor = .textColor
+        backgroundColor = .textBackgroundColor
+        textContainerInset = NSSize(width: 10, height: 10)
+        isHorizontallyResizable = true
+        isVerticallyResizable = true
+        minSize = NSSize(width: 0, height: 0)
+        maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textContainer?.widthTracksTextView = false
+    }
+
+    private func highlightSyntax() {
+        guard !isHighlighting,
+              let storage = textStorage else {
+            return
+        }
+
+        isHighlighting = true
+        let selectedRanges = self.selectedRanges
+        let fullRange = NSRange(location: 0, length: (string as NSString).length)
+
+        storage.beginEditing()
+        storage.setAttributes([
+            .font: editorFont,
+            .foregroundColor: NSColor.textColor
+        ], range: fullRange)
+
+        apply(pattern: #"\b(?:await|async|break|case|catch|class|const|continue|default|delete|do|else|export|finally|for|from|function|if|import|in|instanceof|let|new|null|return|switch|this|throw|try|typeof|undefined|var|void|while|window|document|true|false)\b"#, color: .systemBlue, storage: storage, range: fullRange)
+        apply(pattern: #"\b\d+(?:\.\d+)?\b"#, color: .systemPurple, storage: storage, range: fullRange)
+        apply(pattern: #"//[^\n]*|/\*[\s\S]*?\*/"#, color: .secondaryLabelColor, storage: storage, range: fullRange)
+        apply(pattern: #""(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`"#, color: .systemGreen, storage: storage, range: fullRange)
+
+        storage.endEditing()
+        self.selectedRanges = selectedRanges
+        isHighlighting = false
+    }
+
+    private func apply(
+        pattern: String,
+        color: NSColor,
+        storage: NSTextStorage,
+        range: NSRange
+    ) {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+        regex.enumerateMatches(in: string, range: range) { match, _, _ in
+            guard let matchRange = match?.range else { return }
+            storage.addAttribute(.foregroundColor, value: color, range: matchRange)
+        }
+    }
+}
+
+private final class UserScriptPreferencesWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate, NSTextViewDelegate {
+    private let store = UserScriptStore.shared
+    private let tableView = NSTableView()
+    private let nameField = NSTextField(frame: .zero)
+    private let patternField = NSTextField(frame: .zero)
+    private let codeView = JavaScriptCodeTextView(frame: .zero, textContainer: nil)
+    private let statusLabel = NSTextField(labelWithString: "")
+    private let removeButton = NSButton(title: "-", target: nil, action: nil)
+
+    private var selectedID: UUID?
+    private var isUpdatingControls = false
+
+    init() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 840, height: 560),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "User Scripts"
+        window.minSize = NSSize(width: 720, height: 460)
+        window.isReleasedWhenClosed = false
+        super.init(window: window)
+        buildContent()
+        reloadSelectingFirstIfNeeded()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func show() {
+        NSApp.activate(ignoringOtherApps: true)
+        window?.center()
+        showWindow(nil)
+        window?.makeKeyAndOrderFront(nil)
+    }
+
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        store.scripts.count
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        let identifier = NSUserInterfaceItemIdentifier("UserScriptCell")
+        let textField = tableView.makeView(withIdentifier: identifier, owner: self) as? NSTextField
+            ?? NSTextField(labelWithString: "")
+        textField.identifier = identifier
+        textField.lineBreakMode = .byTruncatingTail
+        textField.font = .systemFont(ofSize: 13)
+        textField.stringValue = store.scripts[row].displayName
+        return textField
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        guard tableView.selectedRow >= 0,
+              store.scripts.indices.contains(tableView.selectedRow) else {
+            selectedID = nil
+            updateControls(for: nil)
+            return
+        }
+
+        let script = store.scripts[tableView.selectedRow]
+        selectedID = script.id
+        updateControls(for: script)
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        persistSelectedScript()
+    }
+
+    func textDidChange(_ notification: Notification) {
+        persistSelectedScript()
+    }
+
+    private func buildContent() {
+        guard let window,
+              let contentView = window.contentView else {
+            return
+        }
+
+        let splitView = NSSplitView()
+        splitView.isVertical = true
+        splitView.dividerStyle = .thin
+        splitView.translatesAutoresizingMaskIntoConstraints = false
+
+        let sidebar = buildSidebar()
+        let detail = buildDetailPane()
+        splitView.addArrangedSubview(sidebar)
+        splitView.addArrangedSubview(detail)
+        sidebar.widthAnchor.constraint(equalToConstant: 220).isActive = true
+
+        contentView.addSubview(splitView)
+        NSLayoutConstraint.activate([
+            splitView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            splitView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            splitView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            splitView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
+        ])
+    }
+
+    private func buildSidebar() -> NSView {
+        let container = NSView()
+
+        tableView.headerView = nil
+        tableView.rowHeight = 30
+        tableView.style = .sourceList
+        tableView.delegate = self
+        tableView.dataSource = self
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("Scripts"))
+        column.resizingMask = .autoresizingMask
+        tableView.addTableColumn(column)
+
+        let scrollView = NSScrollView()
+        scrollView.documentView = tableView
+        scrollView.hasVerticalScroller = true
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+
+        let addButton = NSButton(title: "+", target: self, action: #selector(addScript(_:)))
+        addButton.bezelStyle = .texturedRounded
+        addButton.toolTip = "Add User Script"
+        addButton.translatesAutoresizingMaskIntoConstraints = false
+
+        removeButton.target = self
+        removeButton.action = #selector(removeScript(_:))
+        removeButton.bezelStyle = .texturedRounded
+        removeButton.toolTip = "Remove User Script"
+        removeButton.translatesAutoresizingMaskIntoConstraints = false
+
+        container.addSubview(scrollView)
+        container.addSubview(addButton)
+        container.addSubview(removeButton)
+
+        NSLayoutConstraint.activate([
+            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: container.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: addButton.topAnchor, constant: -8),
+
+            addButton.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 10),
+            addButton.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
+            addButton.widthAnchor.constraint(equalToConstant: 34),
+            addButton.heightAnchor.constraint(equalToConstant: 28),
+
+            removeButton.leadingAnchor.constraint(equalTo: addButton.trailingAnchor, constant: 6),
+            removeButton.centerYAnchor.constraint(equalTo: addButton.centerYAnchor),
+            removeButton.widthAnchor.constraint(equalToConstant: 34),
+            removeButton.heightAnchor.constraint(equalToConstant: 28)
+        ])
+
+        return container
+    }
+
+    private func buildDetailPane() -> NSView {
+        let container = NSView()
+
+        let titleLabel = NSTextField(labelWithString: "User Script")
+        titleLabel.font = .systemFont(ofSize: 18, weight: .semibold)
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let detailLabel = NSTextField(labelWithString: "Scripts run after matching pages finish loading. Match against the full page URL with a regular expression.")
+        detailLabel.textColor = .secondaryLabelColor
+        detailLabel.maximumNumberOfLines = 2
+        detailLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let nameLabel = NSTextField(labelWithString: "Name:")
+        nameLabel.alignment = .right
+        nameLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        nameField.placeholderString = "Script name"
+        nameField.delegate = self
+        nameField.translatesAutoresizingMaskIntoConstraints = false
+
+        let patternLabel = NSTextField(labelWithString: "URL Regex:")
+        patternLabel.alignment = .right
+        patternLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        patternField.placeholderString = #"https://example\.com/.*"#
+        patternField.delegate = self
+        patternField.translatesAutoresizingMaskIntoConstraints = false
+
+        let codeLabel = NSTextField(labelWithString: "JavaScript:")
+        codeLabel.alignment = .right
+        codeLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        codeView.delegate = self
+        let codeScrollView = NSScrollView()
+        codeScrollView.borderType = .bezelBorder
+        codeScrollView.hasVerticalScroller = true
+        codeScrollView.hasHorizontalScroller = true
+        codeScrollView.autohidesScrollers = true
+        codeScrollView.documentView = codeView
+        codeScrollView.translatesAutoresizingMaskIntoConstraints = false
+
+        statusLabel.textColor = .secondaryLabelColor
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        for view in [titleLabel, detailLabel, nameLabel, nameField, patternLabel, patternField, codeLabel, codeScrollView, statusLabel] {
+            container.addSubview(view)
+        }
+
+        NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 24),
+            titleLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -24),
+            titleLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 22),
+
+            detailLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            detailLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
+            detailLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 8),
+
+            nameLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 24),
+            nameLabel.topAnchor.constraint(equalTo: detailLabel.bottomAnchor, constant: 24),
+            nameLabel.widthAnchor.constraint(equalToConstant: 86),
+
+            nameField.leadingAnchor.constraint(equalTo: nameLabel.trailingAnchor, constant: 12),
+            nameField.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -24),
+            nameField.centerYAnchor.constraint(equalTo: nameLabel.centerYAnchor),
+
+            patternLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
+            patternLabel.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: 18),
+            patternLabel.widthAnchor.constraint(equalTo: nameLabel.widthAnchor),
+
+            patternField.leadingAnchor.constraint(equalTo: nameField.leadingAnchor),
+            patternField.trailingAnchor.constraint(equalTo: nameField.trailingAnchor),
+            patternField.centerYAnchor.constraint(equalTo: patternLabel.centerYAnchor),
+
+            codeLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
+            codeLabel.topAnchor.constraint(equalTo: patternLabel.bottomAnchor, constant: 22),
+            codeLabel.widthAnchor.constraint(equalTo: nameLabel.widthAnchor),
+
+            codeScrollView.leadingAnchor.constraint(equalTo: nameField.leadingAnchor),
+            codeScrollView.trailingAnchor.constraint(equalTo: nameField.trailingAnchor),
+            codeScrollView.topAnchor.constraint(equalTo: patternField.bottomAnchor, constant: 18),
+            codeScrollView.bottomAnchor.constraint(equalTo: statusLabel.topAnchor, constant: -10),
+
+            statusLabel.leadingAnchor.constraint(equalTo: codeScrollView.leadingAnchor),
+            statusLabel.trailingAnchor.constraint(equalTo: codeScrollView.trailingAnchor),
+            statusLabel.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -18)
+        ])
+
+        return container
+    }
+
+    private func reloadSelectingFirstIfNeeded() {
+        tableView.reloadData()
+
+        let selectedIndex: Int
+        if let selectedID,
+           let index = store.scripts.firstIndex(where: { $0.id == selectedID }) {
+            selectedIndex = index
+        } else {
+            selectedIndex = store.scripts.isEmpty ? -1 : 0
+        }
+
+        if selectedIndex >= 0 {
+            tableView.selectRowIndexes(IndexSet(integer: selectedIndex), byExtendingSelection: false)
+        } else {
+            updateControls(for: nil)
+        }
+    }
+
+    private func updateControls(for script: UserScriptConfiguration?) {
+        isUpdatingControls = true
+        let isEnabled = script != nil
+        nameField.isEnabled = isEnabled
+        patternField.isEnabled = isEnabled
+        codeView.isEditable = isEnabled
+        removeButton.isEnabled = isEnabled
+
+        nameField.stringValue = script?.name ?? ""
+        patternField.stringValue = script?.urlPattern ?? ""
+        codeView.setCode(script?.source ?? "")
+        updateStatus(for: script)
+        isUpdatingControls = false
+    }
+
+    private func persistSelectedScript() {
+        guard !isUpdatingControls,
+              let selectedID,
+              let current = store.scripts.first(where: { $0.id == selectedID }) else {
+            return
+        }
+
+        let updated = UserScriptConfiguration(
+            id: current.id,
+            name: nameField.stringValue,
+            urlPattern: patternField.stringValue,
+            source: codeView.string
+        )
+        store.update(updated)
+        tableView.reloadData()
+        updateStatus(for: updated)
+    }
+
+    private func updateStatus(for script: UserScriptConfiguration?) {
+        guard let script else {
+            statusLabel.stringValue = "Add a script to get started."
+            statusLabel.textColor = .secondaryLabelColor
+            return
+        }
+
+        if !script.hasValidPattern() {
+            statusLabel.stringValue = "Invalid URL regular expression. This script will not run."
+            statusLabel.textColor = .systemOrange
+        } else if script.trimmedSource == nil {
+            statusLabel.stringValue = "No JavaScript snippet yet."
+            statusLabel.textColor = .secondaryLabelColor
+        } else {
+            statusLabel.stringValue = "Saved. Matching pages will run this script after loading."
+            statusLabel.textColor = .secondaryLabelColor
+        }
+    }
+
+    @objc private func addScript(_ sender: Any?) {
+        let script = store.addScript()
+        selectedID = script.id
+        reloadSelectingFirstIfNeeded()
+        window?.makeFirstResponder(nameField)
+    }
+
+    @objc private func removeScript(_ sender: Any?) {
+        guard let selectedID else { return }
+        store.removeScript(id: selectedID)
+        self.selectedID = nil
+        reloadSelectingFirstIfNeeded()
+    }
+}
+
 private enum WebNotificationBridge {
     static let messageHandlerName = "webAppViewerNotification"
 
@@ -1045,8 +1559,37 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate, W
         webView.pageZoom = min(max(value, 0.5), 3.0)
     }
 
+    private func applyUserScripts() {
+        guard let url = webView.url else { return }
+
+        for script in UserScriptStore.shared.scripts(matching: url) {
+            guard let source = script.trimmedSource else { continue }
+            let wrappedScript = """
+            (() => {
+              try {
+            \(source)
+              } catch (error) {
+                console.error(\(javaScriptStringLiteral("Web App Viewer user script failed: \(script.displayName)")), error);
+              }
+            })();
+            //# sourceURL=webappviewer-userscript-\(sanitizedSourceURLName(script.displayName)).js
+            """
+            webView.evaluateJavaScript(wrappedScript)
+        }
+    }
+
+    private func sanitizedSourceURLName(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        let scalars = value.unicodeScalars.map { scalar in
+            allowed.contains(scalar) ? Character(scalar) : "-"
+        }
+        let cleaned = String(scalars).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        return cleaned.nilIfBlank ?? "script"
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         window?.title = webView.title ?? initialURL.host ?? AppConfig.displayName
+        applyUserScripts()
         updateBrowserChromeForCurrentMouseLocation()
     }
 
@@ -1354,6 +1897,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windows: [BrowserWindowController] = []
     private var blankWindows: [StartupWindowController] = []
     private var pendingURLs: [URL] = []
+    private var userScriptPreferencesWindowController: UserScriptPreferencesWindowController?
 
     override init() {
         super.init()
@@ -1545,6 +2089,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         activeBrowserWindow()?.resetZoom()
     }
 
+    @objc private func showUserScriptPreferences(_ sender: Any?) {
+        if userScriptPreferencesWindowController == nil {
+            userScriptPreferencesWindowController = UserScriptPreferencesWindowController()
+        }
+        userScriptPreferencesWindowController?.show()
+    }
+
     @objc private func installURLAsApp(_ sender: Any?) {
         let activeWindow = activeBrowserWindow()
         guard let url = promptForAppInstallURL() else { return }
@@ -1618,6 +2169,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu()
+        appMenu.addItem(
+            withTitle: "Preferences...",
+            action: #selector(AppDelegate.showUserScriptPreferences(_:)),
+            keyEquivalent: ","
+        )
+        appMenu.addItem(.separator())
         appMenu.addItem(
             withTitle: "Hide \(AppConfig.displayName)",
             action: #selector(NSApplication.hide(_:)),
