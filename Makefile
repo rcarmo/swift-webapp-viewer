@@ -90,6 +90,7 @@ $(APP_BUNDLE): $(APP_SOURCES) $(PLIST) $(ICON) $(ENTITLEMENTS) $(SHARE_EXTENSION
 		-target arm64-apple-macosx$(DEPLOYMENT_TARGET) \
 		$(SWIFTC_FLAGS) \
 		-framework AppKit \
+		-framework JavaScriptCore \
 		-framework WebKit \
 		-framework UniformTypeIdentifiers \
 		-framework UserNotifications \

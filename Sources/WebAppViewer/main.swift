@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import JavaScriptCore
 import UniformTypeIdentifiers
 import UserNotifications
 import WebKit
@@ -839,6 +840,59 @@ private struct UserScriptConfiguration: Codable, Equatable, Identifiable {
     }
 }
 
+private struct JavaScriptSyntaxIssue {
+    let message: String
+    let line: Int?
+    let column: Int?
+
+    var displayMessage: String {
+        if let line, let column {
+            return "JavaScript syntax error on line \(line), column \(column): \(message)"
+        }
+
+        if let line {
+            return "JavaScript syntax error on line \(line): \(message)"
+        }
+
+        return "JavaScript syntax error: \(message)"
+    }
+}
+
+private enum JavaScriptSyntaxValidator {
+    static func firstIssue(in source: String) -> JavaScriptSyntaxIssue? {
+        guard source.nilIfBlank != nil,
+              let literal = javaScriptStringLiteral(for: source),
+              let context = JSContext() else {
+            return nil
+        }
+
+        var issue: JavaScriptSyntaxIssue?
+        context.exceptionHandler = { _, exception in
+            guard let exception else { return }
+
+            let rawLine = exception.forProperty("line")?.toInt32() ?? 0
+            let rawColumn = exception.forProperty("column")?.toInt32() ?? 0
+            let line = rawLine > 2 ? Int(rawLine - 2) : nil
+            let column = rawColumn > 0 ? Int(rawColumn) : nil
+            let message = exception.toString()
+                .replacingOccurrences(of: #"^SyntaxError:\s*"#, with: "", options: .regularExpression)
+
+            issue = JavaScriptSyntaxIssue(message: message, line: line, column: column)
+        }
+
+        context.evaluateScript("new Function(\(literal));")
+        return issue
+    }
+
+    private static func javaScriptStringLiteral(for source: String) -> String? {
+        guard let data = try? JSONEncoder().encode(source) else {
+            return nil
+        }
+
+        return String(data: data, encoding: .utf8)
+    }
+}
+
 private final class UserScriptStore {
     static let shared = UserScriptStore()
     static let didChangeNotification = Notification.Name("WebAppViewerUserScriptsDidChange")
@@ -905,6 +959,7 @@ private final class UserScriptStore {
     private static func refreshBundledExamples(in scripts: [UserScriptConfiguration]) -> [UserScriptConfiguration] {
         var refreshedScripts = scripts
         guard let index = refreshedScripts.firstIndex(where: isBundledHackerNewsExample) else {
+            refreshedScripts.append(hackerNewsDarkModeExample)
             return refreshedScripts
         }
 
@@ -1203,6 +1258,7 @@ private final class UserScriptStore {
 private final class JavaScriptCodeTextView: NSTextView {
     private let editorFont = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
     private var isHighlighting = false
+    private var syntaxIssue: JavaScriptSyntaxIssue?
 
     convenience init() {
         let storage = NSTextStorage()
@@ -1237,6 +1293,11 @@ private final class JavaScriptCodeTextView: NSTextView {
 
     func setCode(_ value: String) {
         string = value
+        highlightSyntax()
+    }
+
+    func setSyntaxIssue(_ issue: JavaScriptSyntaxIssue?) {
+        syntaxIssue = issue
         highlightSyntax()
     }
 
@@ -1286,10 +1347,48 @@ private final class JavaScriptCodeTextView: NSTextView {
         apply(pattern: #"\b\d+(?:\.\d+)?\b"#, color: .systemPurple, storage: storage, range: fullRange)
         apply(pattern: #"//[^\n]*|/\*[\s\S]*?\*/"#, color: .secondaryLabelColor, storage: storage, range: fullRange)
         apply(pattern: #""(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`"#, color: .systemGreen, storage: storage, range: fullRange)
+        applySyntaxIssueHighlight(storage: storage)
 
         storage.endEditing()
         self.selectedRanges = selectedRanges
         isHighlighting = false
+    }
+
+    private func applySyntaxIssueHighlight(storage: NSTextStorage) {
+        guard let line = syntaxIssue?.line,
+              let lineRange = rangeForLine(line) else {
+            return
+        }
+
+        storage.addAttributes([
+            .backgroundColor: NSColor.systemOrange.withAlphaComponent(0.16),
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+            .underlineColor: NSColor.systemOrange
+        ], range: lineRange)
+    }
+
+    private func rangeForLine(_ targetLine: Int) -> NSRange? {
+        guard targetLine > 0 else { return nil }
+
+        let value = string as NSString
+        var currentLine = 1
+        var lineStart = 0
+
+        while currentLine < targetLine {
+            let searchRange = NSRange(location: lineStart, length: value.length - lineStart)
+            let newlineRange = value.range(of: "\n", options: [], range: searchRange)
+            if newlineRange.location == NSNotFound {
+                return nil
+            }
+
+            lineStart = newlineRange.location + newlineRange.length
+            currentLine += 1
+        }
+
+        let searchRange = NSRange(location: lineStart, length: value.length - lineStart)
+        let newlineRange = value.range(of: "\n", options: [], range: searchRange)
+        let lineEnd = newlineRange.location == NSNotFound ? value.length : newlineRange.location
+        return NSRange(location: lineStart, length: lineEnd - lineStart)
     }
 
     private func apply(
@@ -1391,6 +1490,8 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
     private let codeView = JavaScriptCodeTextView()
     private let statusLabel = NSTextField(labelWithString: "")
     private let removeButton = NSButton(title: "-", target: nil, action: nil)
+    private var codeBottomToStatusConstraint: NSLayoutConstraint?
+    private var codeBottomToContainerConstraint: NSLayoutConstraint?
 
     private var selectedID: UUID?
     private var isUpdatingControls = false
@@ -1614,11 +1715,22 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
         codeScrollView.translatesAutoresizingMaskIntoConstraints = false
 
         statusLabel.textColor = .secondaryLabelColor
+        statusLabel.isHidden = true
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
 
         for view in [nameLabel, nameField, patternLabel, patternField, codeScrollView, statusLabel] {
             container.addSubview(view)
         }
+
+        codeBottomToStatusConstraint = codeScrollView.bottomAnchor.constraint(
+            equalTo: statusLabel.topAnchor,
+            constant: -8
+        )
+        codeBottomToContainerConstraint = codeScrollView.bottomAnchor.constraint(
+            equalTo: container.bottomAnchor,
+            constant: -14
+        )
+        codeBottomToContainerConstraint?.isActive = true
 
         NSLayoutConstraint.activate([
             nameLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
@@ -1637,10 +1749,9 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
             patternField.trailingAnchor.constraint(equalTo: nameField.trailingAnchor),
             patternField.centerYAnchor.constraint(equalTo: patternLabel.centerYAnchor),
 
-            codeScrollView.leadingAnchor.constraint(equalTo: nameField.leadingAnchor),
-            codeScrollView.trailingAnchor.constraint(equalTo: nameField.trailingAnchor),
+            codeScrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            codeScrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
             codeScrollView.topAnchor.constraint(equalTo: patternField.bottomAnchor, constant: 18),
-            codeScrollView.bottomAnchor.constraint(equalTo: statusLabel.topAnchor, constant: -10),
 
             statusLabel.leadingAnchor.constraint(equalTo: codeScrollView.leadingAnchor),
             statusLabel.trailingAnchor.constraint(equalTo: codeScrollView.trailingAnchor),
@@ -1722,24 +1833,33 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
 
     private func updateStatus(for script: UserScriptConfiguration?) {
         guard let script else {
-            statusLabel.stringValue = "Add a script to get started."
-            statusLabel.textColor = .secondaryLabelColor
+            codeView.setSyntaxIssue(nil)
+            setStatus("")
             return
         }
 
         if !script.isEnabled {
-            statusLabel.stringValue = "Disabled. This script will not run on the next reload."
-            statusLabel.textColor = .secondaryLabelColor
+            codeView.setSyntaxIssue(nil)
+            setStatus("")
         } else if !script.hasValidPattern() {
-            statusLabel.stringValue = "Invalid URL regular expression. This script will not run."
-            statusLabel.textColor = .systemOrange
-        } else if script.trimmedSource == nil {
-            statusLabel.stringValue = "No JavaScript snippet yet."
-            statusLabel.textColor = .secondaryLabelColor
+            codeView.setSyntaxIssue(nil)
+            setStatus("Invalid URL regular expression. This script will not run.", color: .systemOrange)
+        } else if let issue = JavaScriptSyntaxValidator.firstIssue(in: script.source) {
+            codeView.setSyntaxIssue(issue)
+            setStatus(issue.displayMessage, color: .systemOrange)
         } else {
-            statusLabel.stringValue = "Saved. Matching pages will run this script on the next reload."
-            statusLabel.textColor = .secondaryLabelColor
+            codeView.setSyntaxIssue(nil)
+            setStatus("")
         }
+    }
+
+    private func setStatus(_ message: String, color: NSColor = .secondaryLabelColor) {
+        let hasMessage = !message.isEmpty
+        statusLabel.stringValue = message
+        statusLabel.textColor = color
+        statusLabel.isHidden = !hasMessage
+        codeBottomToStatusConstraint?.isActive = hasMessage
+        codeBottomToContainerConstraint?.isActive = !hasMessage
     }
 
     @objc private func addScript(_ sender: Any?) {
