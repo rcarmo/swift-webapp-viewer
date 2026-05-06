@@ -20,6 +20,7 @@ This exists because Safari Web Apps still feel like they bring too much browser 
 - Supports file downloads to `~/Downloads`.
 - Supports foreground page notifications through the standard `Notification` API while the app is running.
 - Supports per-URL user scripts from Preferences, with script names, URL regular expressions, and a JavaScript editor.
+- Enables Web Inspector for debugging pages from Safari's Develop menu.
 - Provides standard macOS shortcuts for window close, reload, page zoom, edit actions, minimize, and quit.
 - Accepts `.webloc`, `public.url`, and plain text URL drops on the Dock icon.
 - Adds an "Open in Web App Viewer" macOS Service for selected URLs or URL-like text.
@@ -45,7 +46,7 @@ Leave it blank to choose a URL by dragging a link, `.webloc` file, or plain-text
 
 ## Web Features
 
-Web App Viewer is a focused wrapper, not a full browser. It supports normal in-page navigation, JavaScript, downloads, foreground notifications, user scripts, and page zoom. It does not implement background Web Push, browser extensions, tabs, bookmarks, or a persistent address bar.
+Web App Viewer is a focused wrapper, not a full browser. It supports normal in-page navigation, JavaScript, downloads, foreground notifications, user scripts, Web Inspector, and page zoom. It does not implement background Web Push, browser extensions, tabs, bookmarks, or a persistent address bar.
 
 ## Build
 

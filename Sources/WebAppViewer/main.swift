@@ -1382,6 +1382,7 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate, W
 
         self.webView = WKWebView(frame: .zero, configuration: configuration)
         self.webView.customUserAgent = BrowserIdentity.safariUserAgent
+        self.webView.isInspectable = true
         self.webView.allowsBackForwardNavigationGestures = true
         self.webView.allowsMagnification = true
 
