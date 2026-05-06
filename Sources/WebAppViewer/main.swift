@@ -1047,7 +1047,6 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
     private let nameField = NSTextField(frame: .zero)
     private let patternField = NSTextField(frame: .zero)
     private let codeView = JavaScriptCodeTextView()
-    private let scriptCountLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "")
     private let removeButton = NSButton(title: "-", target: nil, action: nil)
 
@@ -1124,7 +1123,7 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
         }
 
         contentView.wantsLayer = true
-        contentView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        contentView.layer?.backgroundColor = NSColor.white.cgColor
 
         let splitView = NSSplitView()
         splitView.isVertical = true
@@ -1135,7 +1134,7 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
         let detail = buildDetailPane()
         splitView.addArrangedSubview(sidebar)
         splitView.addArrangedSubview(detail)
-        sidebar.widthAnchor.constraint(equalToConstant: 250).isActive = true
+        sidebar.widthAnchor.constraint(equalToConstant: 230).isActive = true
 
         contentView.addSubview(splitView)
         NSLayoutConstraint.activate([
@@ -1149,20 +1148,13 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
     private func buildSidebar() -> NSView {
         let container = NSView()
         container.wantsLayer = true
-        container.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-
-        let titleLabel = NSTextField(labelWithString: "User Scripts")
-        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        scriptCountLabel.font = .systemFont(ofSize: 11)
-        scriptCountLabel.textColor = .secondaryLabelColor
-        scriptCountLabel.translatesAutoresizingMaskIntoConstraints = false
+        container.layer?.backgroundColor = NSColor.white.cgColor
 
         tableView.headerView = nil
         tableView.rowHeight = 48
         tableView.style = .sourceList
         tableView.intercellSpacing = NSSize(width: 0, height: 2)
+        tableView.backgroundColor = .white
         tableView.delegate = self
         tableView.dataSource = self
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("Scripts"))
@@ -1173,49 +1165,66 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
         scrollView.borderType = .noBorder
-        scrollView.drawsBackground = false
+        scrollView.drawsBackground = true
+        scrollView.backgroundColor = .white
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
-        let addButton = NSButton(title: "Add", target: self, action: #selector(addScript(_:)))
-        addButton.bezelStyle = .rounded
+        let controlBar = NSView()
+        controlBar.wantsLayer = true
+        controlBar.layer?.cornerRadius = 8
+        controlBar.layer?.backgroundColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.18).cgColor
+        controlBar.translatesAutoresizingMaskIntoConstraints = false
+
+        let addButton = NSButton(title: "+", target: self, action: #selector(addScript(_:)))
+        addButton.bezelStyle = .shadowlessSquare
+        addButton.isBordered = false
+        addButton.font = .systemFont(ofSize: 17, weight: .regular)
         addButton.toolTip = "Add User Script"
         addButton.translatesAutoresizingMaskIntoConstraints = false
 
         removeButton.target = self
         removeButton.action = #selector(removeScript(_:))
-        removeButton.bezelStyle = .rounded
+        removeButton.bezelStyle = .shadowlessSquare
+        removeButton.isBordered = false
+        removeButton.font = .systemFont(ofSize: 17, weight: .regular)
         removeButton.toolTip = "Remove User Script"
         removeButton.translatesAutoresizingMaskIntoConstraints = false
 
-        container.addSubview(titleLabel)
-        container.addSubview(scriptCountLabel)
+        let divider = NSBox()
+        divider.boxType = .separator
+        divider.translatesAutoresizingMaskIntoConstraints = false
+
+        controlBar.addSubview(addButton)
+        controlBar.addSubview(divider)
+        controlBar.addSubview(removeButton)
         container.addSubview(scrollView)
-        container.addSubview(addButton)
-        container.addSubview(removeButton)
+        container.addSubview(controlBar)
 
         NSLayoutConstraint.activate([
-            titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            titleLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
-            titleLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
-
-            scriptCountLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            scriptCountLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
-            scriptCountLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 2),
-
             scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 6),
             scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -6),
-            scrollView.topAnchor.constraint(equalTo: scriptCountLabel.bottomAnchor, constant: 12),
-            scrollView.bottomAnchor.constraint(equalTo: addButton.topAnchor, constant: -8),
+            scrollView.topAnchor.constraint(equalTo: container.topAnchor, constant: 8),
+            scrollView.bottomAnchor.constraint(equalTo: controlBar.topAnchor, constant: -8),
 
-            addButton.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 10),
-            addButton.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
-            addButton.widthAnchor.constraint(equalToConstant: 76),
-            addButton.heightAnchor.constraint(equalToConstant: 28),
+            controlBar.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 10),
+            controlBar.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
+            controlBar.widthAnchor.constraint(equalToConstant: 75),
+            controlBar.heightAnchor.constraint(equalToConstant: 28),
 
-            removeButton.leadingAnchor.constraint(equalTo: addButton.trailingAnchor, constant: 6),
-            removeButton.centerYAnchor.constraint(equalTo: addButton.centerYAnchor),
-            removeButton.widthAnchor.constraint(equalToConstant: 88),
-            removeButton.heightAnchor.constraint(equalToConstant: 28)
+            addButton.leadingAnchor.constraint(equalTo: controlBar.leadingAnchor),
+            addButton.topAnchor.constraint(equalTo: controlBar.topAnchor),
+            addButton.bottomAnchor.constraint(equalTo: controlBar.bottomAnchor),
+            addButton.widthAnchor.constraint(equalToConstant: 37),
+
+            divider.leadingAnchor.constraint(equalTo: addButton.trailingAnchor),
+            divider.centerYAnchor.constraint(equalTo: controlBar.centerYAnchor),
+            divider.heightAnchor.constraint(equalToConstant: 18),
+            divider.widthAnchor.constraint(equalToConstant: 1),
+
+            removeButton.leadingAnchor.constraint(equalTo: divider.trailingAnchor),
+            removeButton.trailingAnchor.constraint(equalTo: controlBar.trailingAnchor),
+            removeButton.topAnchor.constraint(equalTo: controlBar.topAnchor),
+            removeButton.bottomAnchor.constraint(equalTo: controlBar.bottomAnchor)
         ])
 
         return container
@@ -1223,15 +1232,8 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
 
     private func buildDetailPane() -> NSView {
         let container = NSView()
-
-        let titleLabel = NSTextField(labelWithString: "User Script")
-        titleLabel.font = .systemFont(ofSize: 18, weight: .semibold)
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        let detailLabel = NSTextField(labelWithString: "Scripts run after matching pages finish loading. Match against the full page URL with a regular expression.")
-        detailLabel.textColor = .secondaryLabelColor
-        detailLabel.maximumNumberOfLines = 2
-        detailLabel.translatesAutoresizingMaskIntoConstraints = false
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor.white.cgColor
 
         let nameLabel = NSTextField(labelWithString: "Name:")
         nameLabel.alignment = .right
@@ -1272,21 +1274,13 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        for view in [titleLabel, detailLabel, nameLabel, nameField, patternLabel, patternField, codeLabel, codeScrollView, statusLabel] {
+        for view in [nameLabel, nameField, patternLabel, patternField, codeLabel, codeScrollView, statusLabel] {
             container.addSubview(view)
         }
 
         NSLayoutConstraint.activate([
-            titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 24),
-            titleLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -24),
-            titleLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 22),
-
-            detailLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            detailLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
-            detailLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 8),
-
             nameLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 24),
-            nameLabel.topAnchor.constraint(equalTo: detailLabel.bottomAnchor, constant: 24),
+            nameLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 28),
             nameLabel.widthAnchor.constraint(equalToConstant: 86),
 
             nameField.leadingAnchor.constraint(equalTo: nameLabel.trailingAnchor, constant: 12),
@@ -1320,7 +1314,6 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
 
     private func reloadSelectingFirstIfNeeded() {
         tableView.reloadData()
-        updateScriptCountLabel()
 
         let selectedIndex: Int
         if let selectedID,
@@ -1368,14 +1361,8 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
         store.update(updated)
         if shouldRefreshList {
             tableView.reloadData()
-            updateScriptCountLabel()
         }
         updateStatus(for: updated)
-    }
-
-    private func updateScriptCountLabel() {
-        let count = store.scripts.count
-        scriptCountLabel.stringValue = "\(count) script\(count == 1 ? "" : "s") configured"
     }
 
     private func updateStatus(for script: UserScriptConfiguration?) {
