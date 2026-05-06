@@ -12,6 +12,6 @@ This app takes the opposite stance:
 - leave only a small invisible strip for dragging the window
 - accept URLs from Dock drops, paste, Services, the Share sheet, and a custom URL scheme
 - keep app-local navigation in the wrapper while sending external links to Safari
-- cover practical app-shell needs such as downloads and foreground notifications
+- cover practical app-shell needs such as downloads, foreground notifications, page zoom, user scripts, and Web Inspector
 
-It is intentionally small and hackable. To make it your own site wrapper, change `DefaultWebAppURL` in `Info.plist`, replace the icons in `docs/`, and rebuild.
+It is intentionally small and hackable. To make it your own site wrapper, change `DefaultWebAppURL` in `Info.plist`, replace the icons in `docs/`, and rebuild. You can also use the in-app installer to create per-site apps in `~/Applications`; those generated apps keep their own settings, including user scripts.

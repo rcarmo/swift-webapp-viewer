@@ -48,6 +48,18 @@ Leave it blank to choose a URL by dragging a link, `.webloc` file, or plain-text
 
 Web App Viewer is a focused wrapper, not a full browser. It supports normal in-page navigation, JavaScript, downloads, foreground notifications, user scripts, Web Inspector, and page zoom. It does not implement background Web Push, browser extensions, tabs, bookmarks, or a persistent address bar.
 
+## User Scripts
+
+Open Preferences to add JavaScript snippets that run after matching pages finish loading. Each script has:
+
+- a display name
+- a URL regular expression matched against the full page URL
+- a JavaScript editor with syntax highlighting
+
+Generated web apps have their own bundle identifiers and preference stores, so configure user scripts inside the generated app you want to customize. Recreate or replace an existing generated app after installing a newer Web App Viewer build if you want that generated app to inherit newly added app features.
+
+To debug a page or script, enable Safari's Develop menu and choose the matching Web App Viewer page from that menu. Embedded web views are inspectable.
+
 ## Build
 
 ```sh
