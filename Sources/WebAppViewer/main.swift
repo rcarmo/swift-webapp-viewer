@@ -899,7 +899,33 @@ private final class UserScriptStore {
             return [hackerNewsDarkModeExample]
         }
 
-        return scripts
+        return refreshBundledExamples(in: scripts)
+    }
+
+    private static func refreshBundledExamples(in scripts: [UserScriptConfiguration]) -> [UserScriptConfiguration] {
+        var refreshedScripts = scripts
+        guard let index = refreshedScripts.firstIndex(where: isBundledHackerNewsExample) else {
+            return refreshedScripts
+        }
+
+        let current = refreshedScripts[index]
+        refreshedScripts[index] = UserScriptConfiguration(
+            id: current.id,
+            isEnabled: current.isEnabled,
+            name: hackerNewsDarkModeExample.name,
+            urlPattern: hackerNewsDarkModeExample.urlPattern,
+            source: hackerNewsDarkModeExample.source
+        )
+        return refreshedScripts
+    }
+
+    private static func isBundledHackerNewsExample(_ script: UserScriptConfiguration) -> Bool {
+        let name = script.displayName.lowercased()
+        guard name.hasPrefix("example: hacker news") else {
+            return false
+        }
+
+        return script.urlPattern == #"https://news\.ycombinator\.com/.*"#
     }
 
     private static let hackerNewsDarkModeExample = UserScriptConfiguration(
