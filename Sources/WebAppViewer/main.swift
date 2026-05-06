@@ -162,18 +162,77 @@ private enum PasteboardURLReader {
 }
 
 final class WindowDragStripView: NSView {
-    override var mouseDownCanMoveWindow: Bool { true }
+    weak var clickPassthroughView: NSView?
 
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        nil
-    }
+    private var mouseDownEvent: NSEvent?
+    private var didBeginDragging = false
+    private let dragThreshold: CGFloat = 4
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }
 
     override func mouseDown(with event: NSEvent) {
-        window?.performDrag(with: event)
+        mouseDownEvent = event
+        didBeginDragging = false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let mouseDownEvent else { return }
+
+        let deltaX = event.locationInWindow.x - mouseDownEvent.locationInWindow.x
+        let deltaY = event.locationInWindow.y - mouseDownEvent.locationInWindow.y
+        guard didBeginDragging || hypot(deltaX, deltaY) >= dragThreshold else {
+            return
+        }
+
+        didBeginDragging = true
+        window?.performDrag(with: mouseDownEvent)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        defer {
+            mouseDownEvent = nil
+            didBeginDragging = false
+        }
+
+        guard !didBeginDragging,
+              let mouseDownEvent else {
+            return
+        }
+
+        forwardClick(mouseDown: mouseDownEvent, mouseUp: event)
+    }
+
+    private func forwardClick(mouseDown: NSEvent, mouseUp: NSEvent) {
+        guard let targetRoot = clickPassthroughView else { return }
+        let targetPoint = targetRoot.convert(mouseDown.locationInWindow, from: nil)
+        guard let targetView = targetRoot.hitTest(targetPoint),
+              targetView !== self else {
+            return
+        }
+
+        if let forwardedMouseDown = mouseEvent(like: mouseDown, type: .leftMouseDown) {
+            targetView.mouseDown(with: forwardedMouseDown)
+        }
+
+        if let forwardedMouseUp = mouseEvent(like: mouseUp, type: .leftMouseUp) {
+            targetView.mouseUp(with: forwardedMouseUp)
+        }
+    }
+
+    private func mouseEvent(like event: NSEvent, type: NSEvent.EventType) -> NSEvent? {
+        NSEvent.mouseEvent(
+            with: type,
+            location: event.locationInWindow,
+            modifierFlags: event.modifierFlags,
+            timestamp: event.timestamp,
+            windowNumber: event.windowNumber,
+            context: nil,
+            eventNumber: event.eventNumber,
+            clickCount: event.clickCount,
+            pressure: event.pressure
+        )
     }
 }
 
@@ -2086,6 +2145,7 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate, W
 
         let contentView = MouseHoverTrackingView()
         let dragStrip = WindowDragStripView()
+        dragStrip.clickPassthroughView = webView
         webView.translatesAutoresizingMaskIntoConstraints = false
         dragStrip.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(webView)
