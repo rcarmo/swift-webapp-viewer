@@ -1269,10 +1269,10 @@ private final class UserScriptStore {
           .webappviewer-hn-avatar {
             border-radius: 3px;
             box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28);
-            height: 14px;
+            height: 11px;
             image-rendering: pixelated;
             margin-right: 1px;
-            width: 14px;
+            width: 11px;
           }
         `;
 
@@ -2228,6 +2228,7 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate, W
     }
 
     func showWebInspector() {
+        Self.enableDeveloperExtras(on: webView.configuration.preferences)
         webView.isInspectable = true
         window?.makeFirstResponder(webView)
 
@@ -2352,9 +2353,9 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate, W
     }
 
     private static func enableDeveloperExtras(on preferences: WKPreferences) {
-        let selector = NSSelectorFromString("setDeveloperExtrasEnabled:")
+        let selector = NSSelectorFromString("_setDeveloperExtrasEnabled:")
         guard preferences.responds(to: selector) else { return }
-        preferences.setValue(true, forKey: "developerExtrasEnabled")
+        preferences.setValue(true, forKey: "_developerExtrasEnabled")
     }
 
     private func performInspectorSelector(on target: NSObject, names: [String]) -> Bool {
