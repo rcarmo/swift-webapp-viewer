@@ -50,14 +50,14 @@ Web App Viewer is a focused wrapper, not a full browser. It supports normal in-p
 
 ## User Scripts
 
-Open Preferences to add JavaScript snippets that run after matching pages finish loading. Enable or disable scripts from the script list; changes take effect on the next page reload. Each script has:
+Open Preferences to add JavaScript snippets that run at document start on matching pages. Enable or disable scripts from the script list; changes take effect on the next page reload. Each script has:
 
 - a display name
 - an activation checkbox in the script list
 - a URL regular expression matched against the full page URL
 - a JavaScript editor with syntax highlighting
 
-Fresh preference stores include a disabled Hacker News dark-mode and generated-avatar example with source attribution in the script comments.
+Fresh preference stores include a disabled Hacker News appearance and generated-avatar example with source attribution and configuration constants in the script comments.
 
 Generated web apps have their own bundle identifiers and preference stores, so configure user scripts inside the generated app you want to customize. Recreate or replace an existing generated app after installing a newer Web App Viewer build if you want that generated app to inherit newly added app features.
 

@@ -164,6 +164,10 @@ private enum PasteboardURLReader {
 final class WindowDragStripView: NSView {
     override var mouseDownCanMoveWindow: Bool { true }
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }
@@ -998,124 +1002,147 @@ private final class UserScriptStore {
         //   by tomxor and the IntersectionObserver variant by onion2k:
         //   https://news.ycombinator.com/item?id=30668137
 
+        const FORCE_DARK_MODE = false;
+        const FOLLOW_SYSTEM_APPEARANCE = true;
+        const ENABLE_AVATARS = true;
+
         const styleID = "webappviewer-hn-polish";
         document.getElementById(styleID)?.remove();
 
         const style = document.createElement("style");
         style.id = styleID;
         style.textContent = `
-          :root {
+          :root[data-webappviewer-hn-theme="dark"] {
             color-scheme: dark;
+            --hn-page-background: #0a0a0a;
+            --hn-background: #171717;
+            --hn-background-alt: #1f1f1f;
+            --hn-accent: #ff6600;
+            --hn-accent-text: #fff7ed;
+            --hn-text: #d4d4d4;
+            --hn-text-strong: #f5f5f5;
+            --hn-text-muted: #a3a3a3;
+            --hn-text-faint: #737373;
+            --hn-border: #404040;
+            --hn-link: #f97316;
+            --hn-link-hover: #fb923c;
+            --hn-link-visited: #a16207;
+            --hn-input-background: #171717;
+            --hn-input-border: #525252;
+            --hn-warning-background: #7f1d1d;
           }
 
-          html,
-          body,
-          center,
-          #hnmain {
-            background: #101214 !important;
-            color: #d8dde2 !important;
+          :root[data-webappviewer-hn-theme="dark"] body,
+          :root[data-webappviewer-hn-theme="dark"] center {
+            background: var(--hn-page-background) !important;
+            color: var(--hn-text) !important;
           }
 
-          #hnmain {
+          :root[data-webappviewer-hn-theme="dark"] #hnmain {
+            background-color: var(--hn-background) !important;
             border-collapse: collapse;
-            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
           }
 
-          .pagetop,
-          .pagetop a,
-          .hnname a {
-            background: #f07a24 !important;
-            color: #20140a !important;
+          :root[data-webappviewer-hn-theme="dark"] .topcolor,
+          :root[data-webappviewer-hn-theme="dark"] td[bgcolor="#ff6600"] {
+            background-color: var(--hn-accent) !important;
           }
 
-          .pagetop {
+          :root[data-webappviewer-hn-theme="dark"] td[bgcolor="#ffffaa"] {
+            background-color: var(--hn-warning-background) !important;
+            color: var(--hn-text-strong) !important;
+          }
+
+          :root[data-webappviewer-hn-theme="dark"] .pagetop {
             height: 28px !important;
+            color: var(--hn-accent-text) !important;
           }
 
-          .pagetop a,
-          .hnname a {
+          :root[data-webappviewer-hn-theme="dark"] .pagetop a,
+          :root[data-webappviewer-hn-theme="dark"] .hnname a {
+            background: transparent !important;
+            color: var(--hn-accent-text) !important;
             font-weight: 600 !important;
           }
 
-          .title,
-          .title a,
-          .titleline,
-          .titleline a {
-            color: #f3f5f7 !important;
+          :root[data-webappviewer-hn-theme="dark"] .title,
+          :root[data-webappviewer-hn-theme="dark"] .title a,
+          :root[data-webappviewer-hn-theme="dark"] .titleline,
+          :root[data-webappviewer-hn-theme="dark"] .titleline a {
+            color: var(--hn-text-strong) !important;
           }
 
-          .subtext,
-          .subtext a,
-          .yclinks,
-          .yclinks a,
-          .sitestr,
-          .score,
-          .age,
-          .hnuser {
-            color: #9ba7b3 !important;
+          :root[data-webappviewer-hn-theme="dark"] .subtext,
+          :root[data-webappviewer-hn-theme="dark"] .subtext a,
+          :root[data-webappviewer-hn-theme="dark"] .yclinks,
+          :root[data-webappviewer-hn-theme="dark"] .yclinks a,
+          :root[data-webappviewer-hn-theme="dark"] .sitestr,
+          :root[data-webappviewer-hn-theme="dark"] .score,
+          :root[data-webappviewer-hn-theme="dark"] .age,
+          :root[data-webappviewer-hn-theme="dark"] .hnuser {
+            color: var(--hn-text-muted) !important;
           }
 
-          a:link {
-            color: #f3f5f7 !important;
+          :root[data-webappviewer-hn-theme="dark"] a:link {
+            color: var(--hn-link) !important;
           }
 
-          a:visited {
-            color: #aeb0c5 !important;
+          :root[data-webappviewer-hn-theme="dark"] a:visited {
+            color: var(--hn-link-visited) !important;
           }
 
-          a:hover {
-            color: #ffffff !important;
+          :root[data-webappviewer-hn-theme="dark"] a:hover {
+            color: var(--hn-link-hover) !important;
             text-decoration: underline !important;
           }
 
-          .comment,
-          .commtext,
-          .commtext p,
-          .comment-tree {
-            color: #d5d9dd !important;
+          :root[data-webappviewer-hn-theme="dark"] .comment,
+          :root[data-webappviewer-hn-theme="dark"] .commtext,
+          :root[data-webappviewer-hn-theme="dark"] .commtext p,
+          :root[data-webappviewer-hn-theme="dark"] .comment-tree,
+          :root[data-webappviewer-hn-theme="dark"] .toptext {
+            color: var(--hn-text) !important;
           }
 
-          .comhead,
-          .comhead a {
-            color: #9aa6b2 !important;
+          :root[data-webappviewer-hn-theme="dark"] .comhead,
+          :root[data-webappviewer-hn-theme="dark"] .comhead a {
+            color: var(--hn-text-muted) !important;
           }
 
-          .commtext code,
-          .commtext pre {
-            background: #1a1f24 !important;
+          :root[data-webappviewer-hn-theme="dark"] .commtext code,
+          :root[data-webappviewer-hn-theme="dark"] .commtext pre {
+            background: var(--hn-background-alt) !important;
             border-radius: 4px !important;
-            color: #e1e6eb !important;
+            color: var(--hn-text-strong) !important;
           }
 
-          textarea,
-          input[type="text"],
-          input[type="password"] {
-            background: #1b1f24 !important;
-            color: #f0f0f0 !important;
-            border: 1px solid #3a414a !important;
+          :root[data-webappviewer-hn-theme="dark"] textarea,
+          :root[data-webappviewer-hn-theme="dark"] input[type="text"],
+          :root[data-webappviewer-hn-theme="dark"] input[type="url"],
+          :root[data-webappviewer-hn-theme="dark"] input[type="password"] {
+            background: var(--hn-input-background) !important;
+            border: 1px solid var(--hn-input-border) !important;
+            color: var(--hn-text-strong) !important;
           }
 
-          input[type="submit"],
-          button {
-            background: #252b31 !important;
-            color: #f0f0f0 !important;
-            border: 1px solid #46505a !important;
+          :root[data-webappviewer-hn-theme="dark"] input[type="submit"],
+          :root[data-webappviewer-hn-theme="dark"] button {
+            background: var(--hn-background-alt) !important;
+            border: 1px solid var(--hn-border) !important;
+            color: var(--hn-text-strong) !important;
           }
 
-          .votelinks {
+          :root[data-webappviewer-hn-theme="dark"] .votelinks {
             opacity: 0.58;
           }
 
-          .votearrow {
+          :root[data-webappviewer-hn-theme="dark"] .votearrow {
             filter: invert(1) brightness(1.5);
           }
 
-          tr.spacer {
-            background: #111315 !important;
-          }
-
-          td {
-            background: transparent !important;
+          :root[data-webappviewer-hn-theme="dark"] tr.spacer {
+            background: var(--hn-background) !important;
           }
 
           .webappviewer-hn-user {
@@ -1137,119 +1164,141 @@ private final class UserScriptStore {
 
         document.documentElement.appendChild(style);
 
-        const observedUsers = new WeakSet();
-        const renderedUsers = new WeakSet();
+        const darkModeQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-        function seedForName(name) {
-          let seed = 1;
-          for (const character of name) {
-            seed = (seed + character.charCodeAt(0)) | 0;
+        function wantsDarkMode() {
+          return FORCE_DARK_MODE || (FOLLOW_SYSTEM_APPEARANCE && darkModeQuery.matches);
+        }
+
+        function applyAppearance() {
+          if (wantsDarkMode()) {
+            document.documentElement.setAttribute("data-webappviewer-hn-theme", "dark");
+          } else {
+            document.documentElement.removeAttribute("data-webappviewer-hn-theme");
+          }
+        }
+
+        applyAppearance();
+
+        if (FOLLOW_SYSTEM_APPEARANCE) {
+          darkModeQuery.addEventListener?.("change", applyAppearance);
+        }
+
+        if (ENABLE_AVATARS) {
+          const observedUsers = new WeakSet();
+          const renderedUsers = new WeakSet();
+
+          function seedForName(name) {
+            let seed = 1;
+            for (const character of name) {
+              seed = (seed + character.charCodeAt(0)) | 0;
+              seed ^= seed << 13;
+              seed ^= seed >>> 17;
+              seed ^= seed << 5;
+            }
+            return seed || 1;
+          }
+
+          function nextRandom(seed) {
             seed ^= seed << 13;
             seed ^= seed >>> 17;
             seed ^= seed << 5;
-          }
-          return seed || 1;
-        }
-
-        function nextRandom(seed) {
-          seed ^= seed << 13;
-          seed ^= seed >>> 17;
-          seed ^= seed << 5;
-          return seed | 0;
-        }
-
-        function drawAvatar(link) {
-          if (renderedUsers.has(link)) {
-            return;
+            return seed | 0;
           }
 
-          renderedUsers.add(link);
-
-          const username = link.textContent?.trim();
-          if (!username) {
-            return;
-          }
-
-          const canvas = document.createElement("canvas");
-          const scale = 2;
-          const columns = 7;
-          const rows = 7;
-          canvas.className = "webappviewer-hn-avatar";
-          canvas.width = columns * scale;
-          canvas.height = rows * scale;
-          canvas.title = `${username} avatar`;
-
-          const context = canvas.getContext("2d");
-          if (!context) {
-            return;
-          }
-
-          let seed = seedForName(username);
-          const hue = Math.abs(seed) % 360;
-          context.fillStyle = `hsl(${hue} 68% 58%)`;
-
-          for (let y = 0; y < rows; y += 1) {
-            for (let x = 0; x < 4; x += 1) {
-              seed = nextRandom(seed);
-              const density = 5.6 - y * 0.52 - Math.abs(3 - x) * 0.72;
-              if ((seed >>> 29) > density) {
-                continue;
-              }
-
-              context.fillRect((3 + x) * scale, y * scale, scale, scale);
-              context.fillRect((3 - x) * scale, y * scale, scale, scale);
-            }
-          }
-
-          if (link.parentElement?.classList.contains("webappviewer-hn-user") != true) {
-            const wrapper = document.createElement("span");
-            wrapper.className = "webappviewer-hn-user";
-            link.parentNode?.insertBefore(wrapper, link);
-            wrapper.append(canvas, link);
-          } else {
-            link.parentElement.prepend(canvas);
-          }
-        }
-
-        const avatarObserver = new IntersectionObserver((entries) => {
-          for (const entry of entries) {
-            if (entry.isIntersecting && entry.target instanceof HTMLElement) {
-              drawAvatar(entry.target);
-              avatarObserver.unobserve(entry.target);
-            }
-          }
-        }, { rootMargin: "120px 0px" });
-
-        function observeUsers(root = document) {
-          if (root instanceof Element && root.matches("a.hnuser") && !observedUsers.has(root)) {
-            observedUsers.add(root);
-            avatarObserver.observe(root);
-          }
-
-          root.querySelectorAll("a.hnuser").forEach((link) => {
-            if (observedUsers.has(link)) {
+          function drawAvatar(link) {
+            if (renderedUsers.has(link)) {
               return;
             }
 
-            observedUsers.add(link);
-            avatarObserver.observe(link);
-          });
-        }
+            renderedUsers.add(link);
 
-        observeUsers();
+            const username = link.textContent?.trim();
+            if (!username) {
+              return;
+            }
 
-        const mutationObserver = new MutationObserver((mutations) => {
-          for (const mutation of mutations) {
-            for (const node of mutation.addedNodes) {
-              if (node instanceof Element) {
-                observeUsers(node);
+            const canvas = document.createElement("canvas");
+            const scale = 2;
+            const columns = 7;
+            const rows = 7;
+            canvas.className = "webappviewer-hn-avatar";
+            canvas.width = columns * scale;
+            canvas.height = rows * scale;
+            canvas.title = `${username} avatar`;
+
+            const context = canvas.getContext("2d");
+            if (!context) {
+              return;
+            }
+
+            let seed = seedForName(username);
+            const hue = Math.abs(seed) % 360;
+            context.fillStyle = `hsl(${hue} 68% 58%)`;
+
+            for (let y = 0; y < rows; y += 1) {
+              for (let x = 0; x < 4; x += 1) {
+                seed = nextRandom(seed);
+                const density = 5.6 - y * 0.52 - Math.abs(3 - x) * 0.72;
+                if ((seed >>> 29) > density) {
+                  continue;
+                }
+
+                context.fillRect((3 + x) * scale, y * scale, scale, scale);
+                context.fillRect((3 - x) * scale, y * scale, scale, scale);
               }
             }
-          }
-        });
 
-        if (document.body) {
-          mutationObserver.observe(document.body, { childList: true, subtree: true });
+            if (link.parentElement?.classList.contains("webappviewer-hn-user") != true) {
+              const wrapper = document.createElement("span");
+              wrapper.className = "webappviewer-hn-user";
+              link.parentNode?.insertBefore(wrapper, link);
+              wrapper.append(canvas, link);
+            } else {
+              link.parentElement.prepend(canvas);
+            }
+          }
+
+          const avatarObserver = new IntersectionObserver((entries) => {
+            for (const entry of entries) {
+              if (entry.isIntersecting && entry.target instanceof HTMLElement) {
+                drawAvatar(entry.target);
+                avatarObserver.unobserve(entry.target);
+              }
+            }
+          }, { rootMargin: "120px 0px" });
+
+          function observeUsers(root = document) {
+            if (root instanceof Element && root.matches("a.hnuser") && !observedUsers.has(root)) {
+              observedUsers.add(root);
+              avatarObserver.observe(root);
+            }
+
+            root.querySelectorAll("a.hnuser").forEach((link) => {
+              if (observedUsers.has(link)) {
+                return;
+              }
+
+              observedUsers.add(link);
+              avatarObserver.observe(link);
+            });
+          }
+
+          observeUsers();
+
+          const mutationObserver = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+              for (const node of mutation.addedNodes) {
+                if (node instanceof Element) {
+                  observeUsers(node);
+                }
+              }
+            }
+          });
+
+          if (document.body) {
+            mutationObserver.observe(document.body, { childList: true, subtree: true });
+          }
         }
         """#
     )
@@ -2029,12 +2078,16 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate, W
     }
 
     func load(_ url: URL) {
+        installUserScripts(for: url)
         webView.load(URLRequest(url: url))
         window?.representedURL = url
         window?.title = url.host ?? AppConfig.displayName
     }
 
     func reload() {
+        if let url = currentURL {
+            installUserScripts(for: url)
+        }
         webView.reload()
     }
 
@@ -2146,23 +2199,40 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate, W
         webView.pageZoom = min(max(value, 0.5), 3.0)
     }
 
-    private func applyUserScripts() {
-        guard let url = webView.url else { return }
+    private func installUserScripts(for url: URL) {
+        let userContentController = webView.configuration.userContentController
+        userContentController.removeAllUserScripts()
+        userContentController.addUserScript(
+            WKUserScript(
+                source: WebNotificationBridge.script,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: false
+            )
+        )
 
         for script in UserScriptStore.shared.scripts(matching: url) {
             guard let source = script.trimmedSource else { continue }
-            let wrappedScript = """
+            userContentController.addUserScript(
+                WKUserScript(
+                    source: wrappedUserScript(source, displayName: script.displayName),
+                    injectionTime: .atDocumentStart,
+                    forMainFrameOnly: false
+                )
+            )
+        }
+    }
+
+    private func wrappedUserScript(_ source: String, displayName: String) -> String {
+        """
             (() => {
               try {
             \(source)
               } catch (error) {
-                console.error(\(javaScriptStringLiteral("Web App Viewer user script failed: \(script.displayName)")), error);
+                console.error(\(javaScriptStringLiteral("Web App Viewer user script failed: \(displayName)")), error);
               }
             })();
-            //# sourceURL=webappviewer-userscript-\(sanitizedSourceURLName(script.displayName)).js
+            //# sourceURL=webappviewer-userscript-\(sanitizedSourceURLName(displayName)).js
             """
-            webView.evaluateJavaScript(wrappedScript)
-        }
     }
 
     private func sanitizedSourceURLName(_ value: String) -> String {
@@ -2176,7 +2246,6 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate, W
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         window?.title = webView.title ?? initialURL.host ?? AppConfig.displayName
-        applyUserScripts()
         updateBrowserChromeForCurrentMouseLocation()
     }
 
@@ -2206,6 +2275,10 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate, W
             AppDelegate.shared?.openWindow(for: url)
             decisionHandler(.cancel)
             return
+        }
+
+        if navigationAction.targetFrame?.isMainFrame == true {
+            installUserScripts(for: url)
         }
 
         decisionHandler(.allow)
