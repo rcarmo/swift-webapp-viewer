@@ -2129,6 +2129,7 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate, W
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.websiteDataStore = .default()
+        Self.enableDeveloperExtras(on: configuration.preferences)
         configuration.userContentController.addUserScript(
             WKUserScript(
                 source: WebNotificationBridge.script,
@@ -2226,6 +2227,34 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate, W
         setPageZoom(1.0)
     }
 
+    func showWebInspector() {
+        webView.isInspectable = true
+        window?.makeFirstResponder(webView)
+
+        if performInspectorSelector(on: webView, names: [
+            "showWebInspector:",
+            "_showWebInspector:",
+            "showInspector:",
+            "_showInspector:"
+        ]) {
+            return
+        }
+
+        let inspectorSelector = NSSelectorFromString("_inspector")
+        if webView.responds(to: inspectorSelector),
+           let inspector = webView.perform(inspectorSelector)?.takeUnretainedValue() as? NSObject,
+           performInspectorSelector(on: inspector, names: [
+            "show",
+            "show:",
+            "showConsole",
+            "showConsole:"
+           ]) {
+            return
+        }
+
+        webView.evaluateJavaScript("debugger;")
+    }
+
     var currentURL: URL? {
         webView.url ?? window?.representedURL ?? initialURL
     }
@@ -2320,6 +2349,28 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate, W
 
     private func setPageZoom(_ value: CGFloat) {
         webView.pageZoom = min(max(value, 0.5), 3.0)
+    }
+
+    private static func enableDeveloperExtras(on preferences: WKPreferences) {
+        let selector = NSSelectorFromString("setDeveloperExtrasEnabled:")
+        guard preferences.responds(to: selector) else { return }
+        preferences.setValue(true, forKey: "developerExtrasEnabled")
+    }
+
+    private func performInspectorSelector(on target: NSObject, names: [String]) -> Bool {
+        for name in names {
+            let selector = NSSelectorFromString(name)
+            guard target.responds(to: selector) else { continue }
+
+            if name.hasSuffix(":") {
+                target.perform(selector, with: nil)
+            } else {
+                target.perform(selector)
+            }
+            return true
+        }
+
+        return false
     }
 
     private func installUserScripts(for url: URL) {
@@ -2872,6 +2923,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         activeBrowserWindow()?.resetZoom()
     }
 
+    @objc private func showWebInspector(_ sender: Any?) {
+        activeBrowserWindow()?.showWebInspector()
+    }
+
     @objc private func showUserScriptPreferences(_ sender: Any?) {
         if userScriptPreferencesWindowController == nil {
             userScriptPreferencesWindowController = UserScriptPreferencesWindowController()
@@ -3075,6 +3130,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(AppDelegate.resetPageZoom(_:)),
             keyEquivalent: "0"
         )
+        viewMenu.addItem(.separator())
+        let inspectorItem = viewMenu.addItem(
+            withTitle: "Show Web Inspector",
+            action: #selector(AppDelegate.showWebInspector(_:)),
+            keyEquivalent: "i"
+        )
+        inspectorItem.keyEquivalentModifierMask = [.command, .option]
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 
