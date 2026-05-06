@@ -779,20 +779,40 @@ final class IconDropImageView: NSImageView {
 
 private struct UserScriptConfiguration: Codable, Equatable, Identifiable {
     var id: UUID
+    var isEnabled: Bool
     var name: String
     var urlPattern: String
     var source: String
 
     init(
         id: UUID = UUID(),
+        isEnabled: Bool = true,
         name: String,
         urlPattern: String,
         source: String
     ) {
         self.id = id
+        self.isEnabled = isEnabled
         self.name = name
         self.urlPattern = urlPattern
         self.source = source
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(UUID.self, forKey: .id)
+        self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+        self.name = try container.decode(String.self, forKey: .name)
+        self.urlPattern = try container.decode(String.self, forKey: .urlPattern)
+        self.source = try container.decode(String.self, forKey: .source)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case isEnabled
+        case name
+        case urlPattern
+        case source
     }
 
     var displayName: String {
@@ -859,7 +879,7 @@ private final class UserScriptStore {
     }
 
     func scripts(matching url: URL) -> [UserScriptConfiguration] {
-        scripts.filter { $0.matches(url) && $0.trimmedSource != nil }
+        scripts.filter { $0.isEnabled && $0.matches(url) && $0.trimmedSource != nil }
     }
 
     private func save() {
@@ -986,6 +1006,9 @@ private final class JavaScriptCodeTextView: NSTextView {
 }
 
 private final class UserScriptTableCellView: NSTableCellView {
+    var onEnabledChanged: ((Bool) -> Void)?
+
+    private let enabledButton = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let iconView = NSImageView()
     private let titleField = NSTextField(labelWithString: "")
     private let detailField = NSTextField(labelWithString: "")
@@ -1001,12 +1024,20 @@ private final class UserScriptTableCellView: NSTableCellView {
     }
 
     func configure(with script: UserScriptConfiguration) {
+        enabledButton.state = script.isEnabled ? .on : .off
         titleField.stringValue = script.displayName
         detailField.stringValue = script.urlPattern.nilIfBlank ?? "All URLs"
         iconView.contentTintColor = script.hasValidPattern() ? .controlAccentColor : .systemOrange
+        titleField.textColor = script.isEnabled ? .labelColor : .secondaryLabelColor
+        detailField.textColor = script.isEnabled ? .secondaryLabelColor : .tertiaryLabelColor
+        iconView.alphaValue = script.isEnabled ? 1.0 : 0.45
     }
 
     private func configure() {
+        enabledButton.target = self
+        enabledButton.action = #selector(enabledChanged(_:))
+        enabledButton.translatesAutoresizingMaskIntoConstraints = false
+
         iconView.image = NSImage(systemSymbolName: "curlybraces", accessibilityDescription: nil)
         iconView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
         iconView.translatesAutoresizingMaskIntoConstraints = false
@@ -1020,12 +1051,18 @@ private final class UserScriptTableCellView: NSTableCellView {
         detailField.lineBreakMode = .byTruncatingMiddle
         detailField.translatesAutoresizingMaskIntoConstraints = false
 
+        addSubview(enabledButton)
         addSubview(iconView)
         addSubview(titleField)
         addSubview(detailField)
 
         NSLayoutConstraint.activate([
-            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            enabledButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            enabledButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            enabledButton.widthAnchor.constraint(equalToConstant: 18),
+            enabledButton.heightAnchor.constraint(equalToConstant: 18),
+
+            iconView.leadingAnchor.constraint(equalTo: enabledButton.trailingAnchor, constant: 7),
             iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
             iconView.widthAnchor.constraint(equalToConstant: 22),
             iconView.heightAnchor.constraint(equalToConstant: 22),
@@ -1038,6 +1075,10 @@ private final class UserScriptTableCellView: NSTableCellView {
             detailField.trailingAnchor.constraint(equalTo: titleField.trailingAnchor),
             detailField.topAnchor.constraint(equalTo: titleField.bottomAnchor, constant: 1)
         ])
+    }
+
+    @objc private func enabledChanged(_ sender: NSButton) {
+        onEnabledChanged?(sender.state == .on)
     }
 }
 
@@ -1090,8 +1131,12 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
         let identifier = NSUserInterfaceItemIdentifier("UserScriptCell")
         let cellView = tableView.makeView(withIdentifier: identifier, owner: self) as? UserScriptTableCellView
             ?? UserScriptTableCellView()
+        let script = store.scripts[row]
         cellView.identifier = identifier
-        cellView.configure(with: store.scripts[row])
+        cellView.configure(with: script)
+        cellView.onEnabledChanged = { [weak self, id = script.id] isEnabled in
+            self?.setScript(id: id, isEnabled: isEnabled)
+        }
         return cellView
     }
 
@@ -1354,6 +1399,7 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
 
         let updated = UserScriptConfiguration(
             id: current.id,
+            isEnabled: current.isEnabled,
             name: nameField.stringValue,
             urlPattern: patternField.stringValue,
             source: codeView.string
@@ -1365,6 +1411,22 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
         updateStatus(for: updated)
     }
 
+    private func setScript(id: UUID, isEnabled: Bool) {
+        guard let script = store.scripts.first(where: { $0.id == id }) else { return }
+        let updated = UserScriptConfiguration(
+            id: script.id,
+            isEnabled: isEnabled,
+            name: script.name,
+            urlPattern: script.urlPattern,
+            source: script.source
+        )
+        store.update(updated)
+        if selectedID == id {
+            updateStatus(for: updated)
+        }
+        tableView.reloadData()
+    }
+
     private func updateStatus(for script: UserScriptConfiguration?) {
         guard let script else {
             statusLabel.stringValue = "Add a script to get started."
@@ -1372,14 +1434,17 @@ private final class UserScriptPreferencesWindowController: NSWindowController, N
             return
         }
 
-        if !script.hasValidPattern() {
+        if !script.isEnabled {
+            statusLabel.stringValue = "Disabled. This script will not run on the next reload."
+            statusLabel.textColor = .secondaryLabelColor
+        } else if !script.hasValidPattern() {
             statusLabel.stringValue = "Invalid URL regular expression. This script will not run."
             statusLabel.textColor = .systemOrange
         } else if script.trimmedSource == nil {
             statusLabel.stringValue = "No JavaScript snippet yet."
             statusLabel.textColor = .secondaryLabelColor
         } else {
-            statusLabel.stringValue = "Saved. Matching pages will run this script after loading."
+            statusLabel.stringValue = "Saved. Matching pages will run this script on the next reload."
             statusLabel.textColor = .secondaryLabelColor
         }
     }
