@@ -904,16 +904,20 @@ private final class UserScriptStore {
 
     private static let hackerNewsDarkModeExample = UserScriptConfiguration(
         isEnabled: false,
-        name: "Example: Hacker News Dark Mode",
+        name: "Example: Hacker News Dark Mode + Avatars",
         urlPattern: #"https://news\.ycombinator\.com/.*"#,
         source: #"""
         // Example user script for Web App Viewer.
-        // Attribution: adapted from Hacker News - Dark Theme by Jesse Tolj
-        // (MIT License, https://greasyfork.org/en/scripts/510432-hacker-news-dark-theme)
-        // with additional inspiration from susam/userscript Dark HN
-        // (MIT License, https://github.com/susam/userscript).
+        // Attribution:
+        // - Dark theme adapted from Hacker News - Dark Theme by Jesse Tolj
+        //   (MIT License, https://greasyfork.org/en/scripts/510432-hacker-news-dark-theme)
+        //   with additional inspiration from susam/userscript Dark HN
+        //   (MIT License, https://github.com/susam/userscript).
+        // - Generated user avatar idea inspired by "HN Avatars in 357 bytes"
+        //   by tomxor and the IntersectionObserver variant by onion2k:
+        //   https://news.ycombinator.com/item?id=30668137
 
-        const styleID = "webappviewer-hn-dark-mode";
+        const styleID = "webappviewer-hn-polish";
         document.getElementById(styleID)?.remove();
 
         const style = document.createElement("style");
@@ -927,26 +931,36 @@ private final class UserScriptStore {
           body,
           center,
           #hnmain {
-            background: #111315 !important;
-            color: #d7d7d7 !important;
+            background: #101214 !important;
+            color: #d8dde2 !important;
           }
 
           #hnmain {
             border-collapse: collapse;
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
           }
 
           .pagetop,
           .pagetop a,
           .hnname a {
-            background: #ff6600 !important;
-            color: #1b1208 !important;
+            background: #f07a24 !important;
+            color: #20140a !important;
+          }
+
+          .pagetop {
+            height: 28px !important;
+          }
+
+          .pagetop a,
+          .hnname a {
+            font-weight: 600 !important;
           }
 
           .title,
           .title a,
           .titleline,
           .titleline a {
-            color: #f0f0f0 !important;
+            color: #f3f5f7 !important;
           }
 
           .subtext,
@@ -957,15 +971,15 @@ private final class UserScriptStore {
           .score,
           .age,
           .hnuser {
-            color: #9aa4ad !important;
+            color: #9ba7b3 !important;
           }
 
           a:link {
-            color: #f0f0f0 !important;
+            color: #f3f5f7 !important;
           }
 
           a:visited {
-            color: #a8a8b8 !important;
+            color: #aeb0c5 !important;
           }
 
           a:hover {
@@ -977,12 +991,19 @@ private final class UserScriptStore {
           .commtext,
           .commtext p,
           .comment-tree {
-            color: #d0d0d0 !important;
+            color: #d5d9dd !important;
           }
 
           .comhead,
           .comhead a {
-            color: #9aa4ad !important;
+            color: #9aa6b2 !important;
+          }
+
+          .commtext code,
+          .commtext pre {
+            background: #1a1f24 !important;
+            border-radius: 4px !important;
+            color: #e1e6eb !important;
           }
 
           textarea,
@@ -1001,7 +1022,7 @@ private final class UserScriptStore {
           }
 
           .votelinks {
-            opacity: 0.65;
+            opacity: 0.58;
           }
 
           .votearrow {
@@ -1015,9 +1036,140 @@ private final class UserScriptStore {
           td {
             background: transparent !important;
           }
+
+          .webappviewer-hn-user {
+            align-items: center;
+            display: inline-flex;
+            gap: 4px;
+            vertical-align: -3px;
+          }
+
+          .webappviewer-hn-avatar {
+            border-radius: 3px;
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28);
+            height: 14px;
+            image-rendering: pixelated;
+            margin-right: 1px;
+            width: 14px;
+          }
         `;
 
         document.documentElement.appendChild(style);
+
+        const observedUsers = new WeakSet();
+        const renderedUsers = new WeakSet();
+
+        function seedForName(name) {
+          let seed = 1;
+          for (const character of name) {
+            seed = (seed + character.charCodeAt(0)) | 0;
+            seed ^= seed << 13;
+            seed ^= seed >>> 17;
+            seed ^= seed << 5;
+          }
+          return seed || 1;
+        }
+
+        function nextRandom(seed) {
+          seed ^= seed << 13;
+          seed ^= seed >>> 17;
+          seed ^= seed << 5;
+          return seed | 0;
+        }
+
+        function drawAvatar(link) {
+          if (renderedUsers.has(link)) {
+            return;
+          }
+
+          renderedUsers.add(link);
+
+          const username = link.textContent?.trim();
+          if (!username) {
+            return;
+          }
+
+          const canvas = document.createElement("canvas");
+          const scale = 2;
+          const columns = 7;
+          const rows = 7;
+          canvas.className = "webappviewer-hn-avatar";
+          canvas.width = columns * scale;
+          canvas.height = rows * scale;
+          canvas.title = `${username} avatar`;
+
+          const context = canvas.getContext("2d");
+          if (!context) {
+            return;
+          }
+
+          let seed = seedForName(username);
+          const hue = Math.abs(seed) % 360;
+          context.fillStyle = `hsl(${hue} 68% 58%)`;
+
+          for (let y = 0; y < rows; y += 1) {
+            for (let x = 0; x < 4; x += 1) {
+              seed = nextRandom(seed);
+              const density = 5.6 - y * 0.52 - Math.abs(3 - x) * 0.72;
+              if ((seed >>> 29) > density) {
+                continue;
+              }
+
+              context.fillRect((3 + x) * scale, y * scale, scale, scale);
+              context.fillRect((3 - x) * scale, y * scale, scale, scale);
+            }
+          }
+
+          if (link.parentElement?.classList.contains("webappviewer-hn-user") != true) {
+            const wrapper = document.createElement("span");
+            wrapper.className = "webappviewer-hn-user";
+            link.parentNode?.insertBefore(wrapper, link);
+            wrapper.append(canvas, link);
+          } else {
+            link.parentElement.prepend(canvas);
+          }
+        }
+
+        const avatarObserver = new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting && entry.target instanceof HTMLElement) {
+              drawAvatar(entry.target);
+              avatarObserver.unobserve(entry.target);
+            }
+          }
+        }, { rootMargin: "120px 0px" });
+
+        function observeUsers(root = document) {
+          if (root instanceof Element && root.matches("a.hnuser") && !observedUsers.has(root)) {
+            observedUsers.add(root);
+            avatarObserver.observe(root);
+          }
+
+          root.querySelectorAll("a.hnuser").forEach((link) => {
+            if (observedUsers.has(link)) {
+              return;
+            }
+
+            observedUsers.add(link);
+            avatarObserver.observe(link);
+          });
+        }
+
+        observeUsers();
+
+        const mutationObserver = new MutationObserver((mutations) => {
+          for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+              if (node instanceof Element) {
+                observeUsers(node);
+              }
+            }
+          }
+        });
+
+        if (document.body) {
+          mutationObserver.observe(document.body, { childList: true, subtree: true });
+        }
         """#
     )
 }
