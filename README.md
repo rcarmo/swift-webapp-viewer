@@ -20,7 +20,7 @@ This exists because Safari Web Apps still feel like they bring too much browser 
 - Supports file downloads to `~/Downloads`.
 - Supports foreground page notifications through the standard `Notification` API while the app is running.
 - Supports per-URL user scripts from Preferences, with script names, URL regular expressions, and a JavaScript editor.
-- Enables Web Inspector for debugging pages from Safari's Develop menu.
+- Enables Web Inspector from the View menu, Option-Command-I, page context menus, or Safari's Develop menu.
 - Provides standard macOS shortcuts for window close, reload, page zoom, edit actions, minimize, and quit.
 - Accepts `.webloc`, `public.url`, and plain text URL drops on the Dock icon.
 - Adds an "Open in Web App Viewer" macOS Service for selected URLs or URL-like text.
@@ -32,6 +32,12 @@ This exists because Safari Web Apps still feel like they bring too much browser 
 The app is intentionally not a browser replacement. It has no address bar, tab strip, bookmark bar, toolbar, or Safari-style fullscreen frame. Pages open in separate windows, and the only hidden affordance is a narrow drag area at the top so the window can still be moved when the titlebar is visually suppressed.
 
 More background is in [docs/background.md](docs/background.md).
+
+## Screenshots
+
+![Startup window for dropping or pasting a URL](docs/startup-window.svg)
+
+![User Scripts preferences window](docs/user-scripts.svg)
 
 ## Configure The Site
 

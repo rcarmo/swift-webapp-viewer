@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="944" height="504" viewBox="0 0 944 504" role="img" aria-labelledby="title desc">
+  <title id="title">Web App Viewer startup window</title>
+  <desc id="desc">A macOS window prompting the user to drop or paste a URL.</desc>
+  <rect width="944" height="504" rx="30" fill="#ffffff"/>
+  <rect x="0" y="0" width="944" height="62" fill="#f7f7f7"/>
+  <line x1="0" y1="62" x2="944" y2="62" stroke="#dedede"/>
+  <circle cx="32" cy="32" r="14" fill="#ff5f57" stroke="#e54840"/>
+  <circle cx="78" cy="32" r="14" fill="#febc2e" stroke="#e0a326"/>
+  <circle cx="124" cy="32" r="14" fill="#d7d8da" stroke="#c9cacc"/>
+  <text x="169" y="42" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" font-weight="700" fill="#555">Web App Viewer</text>
+  <rect x="49" y="113" width="846" height="342" rx="25" fill="#ffffff" stroke="#e1e1e1" stroke-width="2"/>
+  <g transform="translate(440 200)" fill="none" stroke="#858585" stroke-width="6" stroke-linecap="round">
+    <path d="M26 11l11-11c10-10 27 7 17 17L42 29"/>
+    <path d="M18 19L6 31c-10 10 7 27 17 17l11-11"/>
+    <path d="M18 37l24-24"/>
+  </g>
+  <text x="472" y="318" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="37" font-weight="700" fill="#262626">Drop or paste a URL to open it</text>
+  <text x="472" y="372" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="27" font-weight="500" fill="#7f7f7f">Drag a link, .webloc file, plain-text URL, or paste a URL here.</text>
+</svg>

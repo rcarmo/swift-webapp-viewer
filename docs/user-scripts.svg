@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1184" viewBox="0 0 1680 1184" role="img" aria-labelledby="title desc">
+  <title id="title">User Scripts preferences window</title>
+  <desc id="desc">A macOS preferences window showing a user script list and JavaScript editor.</desc>
+  <rect width="1680" height="1184" rx="30" fill="#ffffff"/>
+  <rect x="0" y="0" width="1680" height="62" fill="#f8f8f8"/>
+  <line x1="0" y1="62" x2="1680" y2="62" stroke="#dddddd"/>
+  <circle cx="32" cy="32" r="14" fill="#ff5f57" stroke="#e54840"/>
+  <circle cx="78" cy="32" r="14" fill="#febc2e" stroke="#e0a326"/>
+  <circle cx="124" cy="32" r="14" fill="#28c840" stroke="#20a935"/>
+  <text x="168" y="42" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" font-weight="700" fill="#555">User Scripts</text>
+  <line x1="461" y1="62" x2="461" y2="1184" stroke="#e2e2e2"/>
+  <rect x="32" y="100" width="396" height="100" rx="14" fill="#d8d8d8"/>
+  <rect x="60" y="134" width="32" height="32" rx="8" fill="#147efb"/>
+  <path d="M68 150l7 8 15-21" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="116" y="162" font-family="Menlo, Monaco, monospace" font-size="34" fill="#0874ff">{}</text>
+  <text x="170" y="140" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="27" font-weight="700" fill="#262626">Example: Hacke...</text>
+  <text x="170" y="170" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="22" fill="#777">https://ne...orl.com/.*</text>
+  <rect x="20" y="1108" width="150" height="56" rx="14" fill="#d4d4d4"/>
+  <line x1="95" y1="1118" x2="95" y2="1154" stroke="#b4b4b4"/>
+  <text x="55" y="1147" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="36" fill="#656565">+</text>
+  <text x="132" y="1147" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="34" fill="#656565">-</text>
+  <text x="640" y="147" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" fill="#292929">Name:</text>
+  <rect x="657" y="111" width="997" height="51" rx="12" fill="#fff" stroke="#e9e9e9" stroke-width="2"/>
+  <text x="671" y="146" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="27" fill="#262626">Example: Hacker News Dark Mode + Avatars</text>
+  <text x="640" y="214" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" fill="#292929">URL Regex:</text>
+  <rect x="657" y="179" width="997" height="51" rx="12" fill="#fff" stroke="#e9e9e9" stroke-width="2"/>
+  <text x="671" y="214" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="27" fill="#262626">https://news\.ycombinator\.com/.*</text>
+  <rect x="487" y="265" width="1164" height="892" fill="#fff" stroke="#dedede" stroke-width="2"/>
+  <g font-family="Menlo, Monaco, monospace" font-size="28">
+    <text x="509" y="311" fill="#888">// Example user script for Web App Viewer.</text>
+    <text x="509" y="341" fill="#888">// Attribution:</text>
+    <text x="509" y="371" fill="#888">// - Dark theme adapted from Hacker News - Dark Theme by Jesse Tolj</text>
+    <text x="509" y="401" fill="#888">//   (MIT License, https://greasyfork.org/en/scripts/510432-hacker-news-dark-theme)</text>
+    <text x="509" y="431" fill="#888">//   with additional inspiration from susam/userscript Dark HN</text>
+    <text x="509" y="461" fill="#888">//   (MIT License, https://github.com/susam/userscript).</text>
+    <text x="509" y="491" fill="#888">// - Generated user avatar idea inspired by </text>
+    <text x="1160" y="491" fill="#24c24a">"HN Avatars in 357 bytes"</text>
+    <text x="509" y="521" fill="#888">//   by tomxor and the IntersectionObserver variant by onion2k:</text>
+    <text x="509" y="551" fill="#888">//   https://news.ycombinator.com/item?id=30668137</text>
+    <text x="509" y="610" fill="#0874ff">const</text>
+    <text x="600" y="610" fill="#111"> FORCE_DARK_MODE = </text>
+    <text x="881" y="610" fill="#0874ff">false</text>
+    <text x="966" y="610" fill="#111">;</text>
+    <text x="509" y="640" fill="#0874ff">const</text>
+    <text x="600" y="640" fill="#111"> FOLLOW_SYSTEM_APPEARANCE = </text>
+    <text x="1017" y="640" fill="#0874ff">true</text>
+    <text x="1090" y="640" fill="#111">;</text>
+    <text x="509" y="670" fill="#0874ff">const</text>
+    <text x="600" y="670" fill="#111"> ENABLE_AVATARS = </text>
+    <text x="864" y="670" fill="#0874ff">true</text>
+    <text x="936" y="670" fill="#111">;</text>
+    <text x="509" y="730" fill="#0874ff">const</text>
+    <text x="600" y="730" fill="#111"> styleID = </text>
+    <text x="792" y="730" fill="#24c24a">"webappviewer-hn-polish"</text>
+    <text x="1200" y="730" fill="#111">;</text>
+    <text x="509" y="760" fill="#0874ff">document</text>
+    <text x="642" y="760" fill="#111">.getElementById(styleID)?.remove();</text>
+    <text x="509" y="820" fill="#0874ff">const</text>
+    <text x="600" y="820" fill="#111"> style = </text>
+    <text x="770" y="820" fill="#0874ff">document</text>
+    <text x="904" y="820" fill="#111">.createElement(</text>
+    <text x="1125" y="820" fill="#24c24a">"style"</text>
+    <text x="1245" y="820" fill="#111">);</text>
+    <text x="509" y="850" fill="#111">style.id = styleID;</text>
+    <text x="509" y="880" fill="#111">style.textContent = `</text>
+    <text x="555" y="910" fill="#24c24a">:root[data-webappviewer-hn-theme="dark"] {</text>
+    <text x="569" y="940" fill="#24c24a">color-scheme: dark;</text>
+    <text x="569" y="970" fill="#24c24a">--hn-page-background: #0a0a0a;</text>
+    <text x="569" y="1000" fill="#24c24a">--hn-background: #171717;</text>
+    <text x="569" y="1030" fill="#24c24a">--hn-background-alt: #1f1f1f;</text>
+    <text x="569" y="1060" fill="#24c24a">--hn-accent: #ff6600;</text>
+    <text x="569" y="1090" fill="#24c24a">--hn-accent-text: #fff7ed;</text>
+    <text x="569" y="1120" fill="#24c24a">--hn-text: #d4d4d4;</text>
+  </g>
+</svg>
