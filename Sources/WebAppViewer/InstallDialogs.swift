@@ -298,6 +298,11 @@ final class IconDropImageView: NSImageView {
     var onImageDrop: ((NSImage, URL?) -> Void)?
     var onImageURLDrop: ((URL) -> Void)?
 
+    private enum DroppedContent {
+        case image(NSImage, URL?)
+        case imageURL(URL)
+    }
+
     private var isDropTargeted = false {
         didSet { needsDisplay = true }
     }
@@ -313,9 +318,13 @@ final class IconDropImageView: NSImageView {
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard accepts(sender.draggingPasteboard) else { return [] }
-        isDropTargeted = true
-        return .copy
+        let hasRelevantTypes = hasRelevantDragTypes(sender.draggingPasteboard)
+        isDropTargeted = hasRelevantTypes
+        return hasRelevantTypes ? .copy : []
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        isDropTargeted ? .copy : []
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {
@@ -327,24 +336,23 @@ final class IconDropImageView: NSImageView {
     }
 
     override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        accepts(sender.draggingPasteboard)
+        hasRelevantDragTypes(sender.draggingPasteboard)
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         isDropTargeted = false
-        let pasteboard = sender.draggingPasteboard
-
-        if let image = NSImage(pasteboard: pasteboard) {
-            onImageDrop?(image, imageURL(from: pasteboard))
-            return true
+        guard let content = droppedContent(from: sender.draggingPasteboard) else {
+            return false
         }
 
-        if let url = imageURL(from: pasteboard) {
+        switch content {
+        case let .image(image, sourceURL):
+            onImageDrop?(image, sourceURL)
+            return true
+        case let .imageURL(url):
             onImageURLDrop?(url)
             return true
         }
-
-        return false
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -363,8 +371,20 @@ final class IconDropImageView: NSImageView {
         registerForDraggedTypes([.fileURL, .URL, .tiff, .png, .string])
     }
 
-    private func accepts(_ pasteboard: NSPasteboard) -> Bool {
-        NSImage(pasteboard: pasteboard) != nil || imageURL(from: pasteboard) != nil
+    private func hasRelevantDragTypes(_ pasteboard: NSPasteboard) -> Bool {
+        pasteboard.availableType(from: [.fileURL, .URL, .tiff, .png, .string]) != nil
+    }
+
+    private func droppedContent(from pasteboard: NSPasteboard) -> DroppedContent? {
+        if let image = NSImage(pasteboard: pasteboard) {
+            return .image(image, imageURL(from: pasteboard))
+        }
+
+        if let url = imageURL(from: pasteboard) {
+            return .imageURL(url)
+        }
+
+        return nil
     }
 
     private func imageURL(from pasteboard: NSPasteboard) -> URL? {

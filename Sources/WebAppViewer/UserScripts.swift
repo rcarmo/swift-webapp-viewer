@@ -121,12 +121,17 @@ final class UserScriptStore {
     static let shared = UserScriptStore()
 
     private let defaultsKey = "UserScripts"
+    private let unreadableBackupDefaultsKey = "UserScriptsUnreadableBackup"
     private let defaults: UserDefaults
     private(set) var scripts: [UserScriptConfiguration]
 
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.scripts = Self.loadScripts(from: defaults, key: defaultsKey)
+        self.scripts = Self.loadScripts(
+            from: defaults,
+            key: defaultsKey,
+            unreadableBackupKey: unreadableBackupDefaultsKey
+        )
     }
 
     @discardableResult
@@ -165,34 +170,44 @@ final class UserScriptStore {
         }
     }
 
-    private static func loadScripts(from defaults: UserDefaults, key: String) -> [UserScriptConfiguration] {
+    private static func loadScripts(
+        from defaults: UserDefaults,
+        key: String,
+        unreadableBackupKey: String
+    ) -> [UserScriptConfiguration] {
         guard defaults.object(forKey: key) != nil else {
             return [hackerNewsDarkModeExample]
         }
 
-        guard let data = defaults.data(forKey: key),
-              let scripts = try? JSONDecoder().decode([UserScriptConfiguration].self, from: data) else {
+        guard let data = defaults.data(forKey: key) else {
+            return [hackerNewsDarkModeExample]
+        }
+
+        guard let scripts = try? JSONDecoder().decode([UserScriptConfiguration].self, from: data) else {
+            preserveUnreadableScripts(data, in: defaults, backupKey: unreadableBackupKey)
             return [hackerNewsDarkModeExample]
         }
 
         return refreshBundledExamples(in: scripts)
     }
 
+    private static func preserveUnreadableScripts(
+        _ data: Data,
+        in defaults: UserDefaults,
+        backupKey: String
+    ) {
+        if defaults.data(forKey: backupKey) != data {
+            defaults.set(data, forKey: backupKey)
+        }
+    }
+
     private static func refreshBundledExamples(in scripts: [UserScriptConfiguration]) -> [UserScriptConfiguration] {
         var refreshedScripts = scripts
-        guard let index = refreshedScripts.firstIndex(where: isBundledHackerNewsExample) else {
-            refreshedScripts.append(hackerNewsDarkModeExample)
+        guard !refreshedScripts.contains(where: isBundledHackerNewsExample) else {
             return refreshedScripts
         }
 
-        let current = refreshedScripts[index]
-        refreshedScripts[index] = UserScriptConfiguration(
-            id: current.id,
-            isEnabled: current.isEnabled,
-            name: hackerNewsDarkModeExample.name,
-            urlPattern: hackerNewsDarkModeExample.urlPattern,
-            source: hackerNewsDarkModeExample.source
-        )
+        refreshedScripts.append(hackerNewsDarkModeExample)
         return refreshedScripts
     }
 
@@ -739,6 +754,7 @@ final class UserScriptTableCellView: NSTableCellView {
     var onEnabledChanged: ((Bool) -> Void)?
 
     private let enabledButton = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let iconBackgroundView = NSView()
     private let iconView = NSImageView()
     private let titleField = NSTextField(labelWithString: "")
     private let detailField = NSTextField(labelWithString: "")
@@ -757,10 +773,14 @@ final class UserScriptTableCellView: NSTableCellView {
         enabledButton.state = script.isEnabled ? .on : .off
         titleField.stringValue = script.displayName
         detailField.stringValue = script.urlPattern.nilIfBlank ?? "All URLs"
-        iconView.contentTintColor = script.hasValidPattern() ? .controlAccentColor : .systemOrange
+        iconView.contentTintColor = .white
+        iconBackgroundView.layer?.backgroundColor = resolvedIconBackgroundColor(
+            isEnabled: script.isEnabled,
+            hasValidPattern: script.hasValidPattern()
+        )
         titleField.textColor = script.isEnabled ? .labelColor : .secondaryLabelColor
         detailField.textColor = script.isEnabled ? .secondaryLabelColor : .tertiaryLabelColor
-        iconView.alphaValue = script.isEnabled ? 1.0 : 0.45
+        iconView.alphaValue = script.isEnabled ? 1.0 : 0.75
     }
 
     private func configure() {
@@ -768,56 +788,82 @@ final class UserScriptTableCellView: NSTableCellView {
         enabledButton.action = #selector(enabledChanged(_:))
         enabledButton.translatesAutoresizingMaskIntoConstraints = false
 
+        iconBackgroundView.wantsLayer = true
+        iconBackgroundView.layer?.cornerRadius = 12
+        iconBackgroundView.layer?.cornerCurve = .continuous
+        iconBackgroundView.translatesAutoresizingMaskIntoConstraints = false
+
         iconView.image = NSImage(systemSymbolName: "curlybraces", accessibilityDescription: nil)
-        iconView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
+        iconView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
         iconView.translatesAutoresizingMaskIntoConstraints = false
 
-        titleField.font = .systemFont(ofSize: 13, weight: .medium)
+        titleField.font = .systemFont(ofSize: 15, weight: .semibold)
         titleField.lineBreakMode = .byTruncatingTail
         titleField.translatesAutoresizingMaskIntoConstraints = false
 
-        detailField.font = .systemFont(ofSize: 11)
+        detailField.font = .systemFont(ofSize: 12)
         detailField.textColor = .secondaryLabelColor
         detailField.lineBreakMode = .byTruncatingMiddle
         detailField.translatesAutoresizingMaskIntoConstraints = false
 
+        iconBackgroundView.addSubview(iconView)
+        addSubview(iconBackgroundView)
         addSubview(enabledButton)
-        addSubview(iconView)
         addSubview(titleField)
         addSubview(detailField)
 
         NSLayoutConstraint.activate([
-            enabledButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            iconBackgroundView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            iconBackgroundView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconBackgroundView.widthAnchor.constraint(equalToConstant: 38),
+            iconBackgroundView.heightAnchor.constraint(equalTo: iconBackgroundView.widthAnchor),
+
+            iconView.centerXAnchor.constraint(equalTo: iconBackgroundView.centerXAnchor),
+            iconView.centerYAnchor.constraint(equalTo: iconBackgroundView.centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 22),
+            iconView.heightAnchor.constraint(equalTo: iconView.widthAnchor),
+
+            enabledButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             enabledButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             enabledButton.widthAnchor.constraint(equalToConstant: 18),
             enabledButton.heightAnchor.constraint(equalToConstant: 18),
 
-            iconView.leadingAnchor.constraint(equalTo: enabledButton.trailingAnchor, constant: 7),
-            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 22),
-            iconView.heightAnchor.constraint(equalToConstant: 22),
-
-            titleField.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 8),
-            titleField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            titleField.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            titleField.leadingAnchor.constraint(equalTo: iconBackgroundView.trailingAnchor, constant: 10),
+            titleField.trailingAnchor.constraint(lessThanOrEqualTo: enabledButton.leadingAnchor, constant: -8),
+            titleField.topAnchor.constraint(equalTo: topAnchor, constant: 8),
 
             detailField.leadingAnchor.constraint(equalTo: titleField.leadingAnchor),
             detailField.trailingAnchor.constraint(equalTo: titleField.trailingAnchor),
-            detailField.topAnchor.constraint(equalTo: titleField.bottomAnchor, constant: 1)
+            detailField.topAnchor.constraint(equalTo: titleField.bottomAnchor, constant: 2),
+            detailField.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -8)
         ])
     }
 
     @objc private func enabledChanged(_ sender: NSButton) {
         onEnabledChanged?(sender.state == .on)
     }
+
+    private func resolvedIconBackgroundColor(isEnabled: Bool, hasValidPattern: Bool) -> CGColor {
+        let baseColor: NSColor
+        if !hasValidPattern {
+            baseColor = .systemOrange
+        } else if isEnabled {
+            baseColor = .controlAccentColor
+        } else {
+            baseColor = .tertiaryLabelColor
+        }
+
+        let resolved = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? baseColor.withAlphaComponent(isEnabled ? 0.9 : 0.65)
+            : baseColor
+        return resolved.usingColorSpace(.deviceRGB)?.cgColor ?? baseColor.cgColor
+    }
 }
 
-// BUG FIX: Removed all hardcoded NSColor.white.cgColor backgrounds that broke
-// dark mode. The window, split view, and table view now use default system
-// backgrounds which respect the user's appearance setting.
-final class UserScriptPreferencesWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate, NSTextViewDelegate {
+final class UserScriptPreferencesWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate, NSTextViewDelegate, NSWindowDelegate {
     private let store = UserScriptStore.shared
     private let tableView = NSTableView()
+    private let scriptsColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("Scripts"))
     private let nameField = NSTextField(frame: .zero)
     private let patternField = NSTextField(frame: .zero)
     private let codeView = JavaScriptCodeTextView()
@@ -840,6 +886,7 @@ final class UserScriptPreferencesWindowController: NSWindowController, NSTableVi
         window.minSize = NSSize(width: 720, height: 460)
         window.isReleasedWhenClosed = false
         super.init(window: window)
+        window.delegate = self
         buildContent()
         reloadSelectingFirstIfNeeded()
     }
@@ -856,6 +903,11 @@ final class UserScriptPreferencesWindowController: NSWindowController, NSTableVi
         }
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
+        syncSidebarColumnWidth()
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        syncSidebarColumnWidth()
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
@@ -924,22 +976,33 @@ final class UserScriptPreferencesWindowController: NSWindowController, NSTableVi
 
     private func buildSidebar() -> NSView {
         let container = NSView()
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor.white.cgColor
 
         tableView.headerView = nil
-        tableView.rowHeight = 48
+        tableView.rowHeight = 56
         tableView.style = .sourceList
-        tableView.intercellSpacing = NSSize(width: 0, height: 2)
+        tableView.intercellSpacing = .zero
+        tableView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
+        tableView.autoresizingMask = [.width]
+        tableView.backgroundColor = .white
         tableView.delegate = self
         tableView.dataSource = self
-        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("Scripts"))
-        column.resizingMask = .autoresizingMask
-        tableView.addTableColumn(column)
+        scriptsColumn.resizingMask = .autoresizingMask
+        scriptsColumn.width = 210
+        scriptsColumn.minWidth = 180
+        tableView.addTableColumn(scriptsColumn)
 
         let scrollView = NSScrollView()
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
-        scrollView.drawsBackground = false
+        scrollView.drawsBackground = true
+        scrollView.backgroundColor = .white
+        scrollView.contentView.drawsBackground = true
+        scrollView.contentView.backgroundColor = .white
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
         let controlBar = NSView()
@@ -1001,6 +1064,14 @@ final class UserScriptPreferencesWindowController: NSWindowController, NSTableVi
         ])
 
         return container
+    }
+
+    private func syncSidebarColumnWidth() {
+        let targetWidth = max(tableView.enclosingScrollView?.contentSize.width ?? 0, scriptsColumn.minWidth)
+        if abs(scriptsColumn.width - targetWidth) > 0.5 {
+            scriptsColumn.width = targetWidth
+            tableView.sizeLastColumnToFit()
+        }
     }
 
     private func buildDetailPane() -> NSView {

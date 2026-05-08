@@ -11,8 +11,18 @@ case "$MODE" in
     make -C "$ROOT_DIR" run
     ;;
   --debug|debug)
+    pkill -x "$APP_NAME" >/dev/null 2>&1 || true
     make -C "$ROOT_DIR" CONFIG=debug
-    lldb -- "$ROOT_DIR/.build/$APP_NAME.app/Contents/MacOS/$APP_NAME"
+    open -n "$ROOT_DIR/.build/$APP_NAME.app"
+    for _ in {1..50}; do
+      PID="$(pgrep -n -x "$APP_NAME" || true)"
+      if [[ -n "$PID" ]]; then
+        exec lldb -p "$PID"
+      fi
+      sleep 0.1
+    done
+    echo "Failed to find running $APP_NAME after launching the app bundle" >&2
+    exit 1
     ;;
   --logs|logs)
     make -C "$ROOT_DIR" run

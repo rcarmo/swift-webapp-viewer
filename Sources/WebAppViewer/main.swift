@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.mainMenu = Self.makeMainMenu()
+        NSApp.mainMenu = makeMainMenu()
         NSRegisterServicesProvider(self, "WebAppViewer")
         NSUpdateDynamicServices()
 
@@ -51,14 +51,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sender.reply(toOpenOrPrint: .success)
     }
 
+    @objc private func paste(_ sender: Any?) {
+        traceStartupFlow("Paste action invoked")
+        if activeStartupWindow()?.pasteFromGeneralPasteboard() == true {
+            traceStartupFlow("Paste handled by startup window")
+            return
+        }
+
+        traceStartupFlow("Paste forwarded to NSText responder chain")
+        _ = NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: sender)
+    }
+
     func openWindow(for url: URL) {
+        traceStartupFlow("openWindow begin url=\(url.absoluteString)")
         let controller = BrowserWindowController(url: url)
         windows.append(controller)
+        traceStartupFlow("openWindow appended controller count=\(windows.count)")
         controller.showWindow(nil)
         controller.window?.center()
         controller.window?.makeKeyAndOrderFront(nil)
         controller.updateBrowserChromeForCurrentMouseLocation()
         NSApp.activate(ignoringOtherApps: true)
+        traceStartupFlow("openWindow finished key=\(controller.window?.isKeyWindow == true)")
     }
 
     func windowDidClose(_ controller: BrowserWindowController) {
@@ -70,6 +84,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windows.first { $0.window?.isKeyWindow == true }
             ?? windows.first { $0.window?.isMainWindow == true }
             ?? windows.last
+    }
+
+    private func activeStartupWindow() -> StartupWindowController? {
+        blankWindows.first { $0.window === NSApp.keyWindow }
+            ?? blankWindows.first { $0.window === NSApp.mainWindow }
+            ?? blankWindows.last
     }
 
     private func open(_ urls: [URL]) {
@@ -92,33 +112,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openBlankWindow() {
-        var controller: StartupWindowController?
-        controller = StartupWindowController { [weak self, weak controller] url in
-            if let controller {
-                self?.closeBlankWindow(controller)
-            }
+        traceStartupFlow("openBlankWindow begin")
+        let controller = StartupWindowController { [weak self] url in
+            self?.traceStartupFlow("startup onURL received \(url.absoluteString)")
             self?.openWindow(for: url)
+            self?.closeActiveStartupWindowAfterURLIntake()
         }
-        controller?.onClose = { [weak self, weak controller] in
+        controller.onClose = { [weak self, weak controller] in
             guard let controller else { return }
             self?.blankWindowDidClose(controller)
         }
-        guard let controller else { return }
 
         blankWindows.append(controller)
+        traceStartupFlow("openBlankWindow appended startup count=\(blankWindows.count)")
         controller.showWindow(nil)
         controller.window?.center()
         controller.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        traceStartupFlow("openBlankWindow finished key=\(controller.window?.isKeyWindow == true)")
     }
 
-    private func closeBlankWindow(_ controller: StartupWindowController) {
+    private func closeActiveStartupWindowAfterURLIntake() {
+        guard let controller = activeStartupWindow() else {
+            traceStartupFlow("closeActiveStartupWindowAfterURLIntake no active startup window")
+            return
+        }
+        traceStartupFlow("closeActiveStartupWindowAfterURLIntake closing startup window")
         controller.close()
-        blankWindowDidClose(controller)
     }
 
     private func blankWindowDidClose(_ controller: StartupWindowController) {
         blankWindows.removeAll { $0 === controller }
+        traceStartupFlow("blankWindowDidClose remaining startup count=\(blankWindows.count)")
         terminateIfNoWindowsRemain()
     }
 
@@ -127,9 +152,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self,
                   self.windows.isEmpty,
                   self.blankWindows.isEmpty else {
+                self?.traceStartupFlow("terminateIfNoWindowsRemain skipped browser=\(self?.windows.count ?? -1) startup=\(self?.blankWindows.count ?? -1)")
                 return
             }
 
+            self.traceStartupFlow("terminateIfNoWindowsRemain terminating app")
             NSApp.terminate(nil)
         }
     }
@@ -148,7 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         userData: String?,
         error: AutoreleasingUnsafeMutablePointer<NSString>
     ) {
-        guard let url = PasteboardURLReader.url(from: pasteboard) else {
+        guard let url = PasteboardURLReader.url(from: pasteboard, context: "services-open-url") else {
             error.pointee = "No URL was found on the pasteboard." as NSString
             return
         }
@@ -278,7 +305,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.runModal()
     }
 
-    private static func makeMainMenu() -> NSMenu {
+    private func makeMainMenu() -> NSMenu {
         let mainMenu = NSMenu()
 
         let appMenuItem = NSMenuItem()
@@ -364,11 +391,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(NSText.copy(_:)),
             keyEquivalent: "c"
         )
-        editMenu.addItem(
+        let pasteItem = editMenu.addItem(
             withTitle: "Paste",
-            action: #selector(NSText.paste(_:)),
+            action: #selector(AppDelegate.paste(_:)),
             keyEquivalent: "v"
         )
+        pasteItem.target = self
         editMenu.addItem(
             withTitle: "Delete",
             action: #selector(NSText.delete(_:)),
@@ -439,6 +467,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.windowsMenu = windowMenu
 
         return mainMenu
+    }
+
+    private func traceStartupFlow(_ message: String) {
+        let defaults = UserDefaults.standard
+        let isEnabled = defaults.object(forKey: "WebAppViewerTraceURLIntake") as? Bool ?? true
+        guard isEnabled else { return }
+
+        let line = "[StartupFlow] \(message)"
+        NSLog("%@", line)
+
+        let logURL = URL(fileURLWithPath: "/tmp/WebAppViewer-urlintake.log")
+        let entry = "\(ISO8601DateFormatter().string(from: Date())) \(line)\n"
+        guard let data = entry.data(using: .utf8) else { return }
+
+        let fileManager = FileManager.default
+        if !fileManager.fileExists(atPath: logURL.path) {
+            fileManager.createFile(atPath: logURL.path, contents: data)
+            return
+        }
+
+        guard let fileHandle = try? FileHandle(forWritingTo: logURL) else { return }
+        defer { try? fileHandle.close() }
+        _ = try? fileHandle.seekToEnd()
+        try? fileHandle.write(contentsOf: data)
     }
 }
 

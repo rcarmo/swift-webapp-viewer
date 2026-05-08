@@ -75,7 +75,7 @@ enum WebNotificationBridge {
 
       window.__webAppViewerNotificationBridgeInstalled = true;
       let permission = "default";
-      let nextPermissionRequest = 1;
+      var nextPermissionRequest = 1;
       const pendingPermissionRequests = new Map();
 
       function post(message) {
@@ -389,7 +389,7 @@ final class BrowserWindowController: NSWindowController, WKNavigationDelegate, W
     private static func enableDeveloperExtras(on preferences: WKPreferences) {
         let selector = NSSelectorFromString("_setDeveloperExtrasEnabled:")
         guard preferences.responds(to: selector) else { return }
-        preferences.setValue(true, forKey: "_developerExtrasEnabled")
+        preferences.perform(selector, with: NSNumber(value: true))
     }
 
     private func performInspectorSelector(on target: NSObject, names: [String]) -> Bool {
